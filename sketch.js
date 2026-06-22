@@ -725,15 +725,69 @@ function handleTap(x, y) {
         case STATE.SECOND_DECISION: {
             const buttons = getDecisionButtonRects();
 
-            if (isInside(x, y, buttons.close.x, buttons.close.y, buttons.close.w, buttons.close.h)) {
+            const isRelationDecision =
+                model.activeRelationEvent &&
+                model.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI &&
+                model.activeRelationEvent.phase === "DECISION";
+
+            if (isRelationDecision) {
+                if (
+                    isInside(
+                        x,
+                        y,
+                        buttons.close.x,
+                        buttons.close.y,
+                        buttons.close.w,
+                        buttons.close.h
+                    )
+                ) {
+                    model.resolveRelationEventDecision("CLOSE");
+                    lockInput();
+                } else if (
+                    isInside(
+                        x,
+                        y,
+                        buttons.more.x,
+                        buttons.more.y,
+                        buttons.more.w,
+                        buttons.more.h
+                    )
+                ) {
+                    model.resolveRelationEventDecision("MORE");
+                    lockInput();
+                }
+
+                break;
+            }
+
+            if (
+                isInside(
+                    x,
+                    y,
+                    buttons.close.x,
+                    buttons.close.y,
+                    buttons.close.w,
+                    buttons.close.h
+                )
+            ) {
                 model.message = "まいどあり。気をつけて。";
                 model.state = STATE.SECOND_RESULT;
                 lockInput();
-            } else if (isInside(x, y, buttons.more.x, buttons.more.y, buttons.more.w, buttons.more.h)) {
+            } else if (
+                isInside(
+                    x,
+                    y,
+                    buttons.more.x,
+                    buttons.more.y,
+                    buttons.more.w,
+                    buttons.more.h
+                )
+            ) {
                 model.createSecondOptions();
                 model.state = STATE.SECOND_CHOICE;
                 lockInput();
             }
+
             break;
         }
 
@@ -766,6 +820,7 @@ function handleTap(x, y) {
             break;
     }
 }
+
 
 
 
@@ -1045,91 +1100,102 @@ function drawStall() {
 
 
 function drawCustomer() {
-  if (!model.currentCustomer) return;
+    if (!model.currentCustomer) return;
 
-  const x = model.customerX;
-  const y = 183;
-  const customer = model.currentCustomer;
+    const x = model.customerX;
+    const y = 183;
+    const customer = model.currentCustomer;
 
-  let coat = { r: 58, g: 70, b: 83 };
-  let hair = { r: 42, g: 37, b: 35 };
-  let accent = { r: 118, g: 132, b: 144 };
+    let coat = { r: 58, g: 70, b: 83 };
+    let hair = { r: 42, g: 37, b: 35 };
+    let accent = { r: 118, g: 132, b: 144 };
 
-  if (customer.visual === "regular_worker") {
-    coat = { r: 91, g: 68, b: 53 };
-    accent = { r: 170, g: 134, b: 85 };
-  } else if (customer.visual === "happy_worker") {
-    coat = { r: 92, g: 65, b: 62 };
-    accent = { r: 205, g: 134, b: 83 };
-  } else if (customer.visual === "inn_worker") {
-    coat = { r: 59, g: 81, b: 71 };
-    hair = { r: 54, g: 44, b: 37 };
-    accent = { r: 198, g: 178, b: 135 };
-  } else if (customer.visual === "tourist") {
-    coat = { r: 89, g: 113, b: 132 };
-    hair = { r: 108, g: 78, b: 50 };
-    accent = { r: 216, g: 187, b: 116 };
-  } else if (customer.visual === "student") {
-    coat = { r: 72, g: 87, b: 117 };
-    hair = { r: 34, g: 35, b: 42 };
-    accent = { r: 190, g: 198, b: 209 };
-  }
+    if (customer.visual === "regular_worker") {
+        coat = { r: 91, g: 68, b: 53 };
+        accent = { r: 170, g: 134, b: 85 };
+    } else if (customer.visual === "happy_worker") {
+        coat = { r: 92, g: 65, b: 62 };
+        accent = { r: 205, g: 134, b: 83 };
+    } else if (customer.visual === "inn_worker") {
+        coat = { r: 59, g: 81, b: 71 };
+        hair = { r: 54, g: 44, b: 37 };
+        accent = { r: 198, g: 178, b: 135 };
+    } else if (customer.visual === "tourist") {
+        coat = { r: 89, g: 113, b: 132 };
+        hair = { r: 108, g: 78, b: 50 };
+        accent = { r: 216, g: 187, b: 116 };
+    } else if (customer.visual === "student") {
+        coat = { r: 72, g: 87, b: 117 };
+        hair = { r: 34, g: 35, b: 42 };
+        accent = { r: 190, g: 198, b: 209 };
+    }
 
-  fill(10, 13, 19, 110);
-  rectMode(CORNER);
-  rect(x - 17, y, 34, 4);
+    fill(10, 13, 19, 110);
+    rectMode(CORNER);
+    rect(x - 17, y, 34, 4);
 
-  fill(coat.r, coat.g, coat.b);
-  rect(x - 14, y + 3, 28, 37);
+    fill(coat.r, coat.g, coat.b);
+    rect(x - 14, y + 3, 28, 37);
 
-  fill(accent.r, accent.g, accent.b);
-  rect(x - 5, y + 34, 10, 8);
+    fill(accent.r, accent.g, accent.b);
+    rect(x - 5, y + 34, 10, 8);
 
-  if (customer.visual === "tourist") {
-    fill(126, 83, 48);
-    rect(x + 11, y + 10, 8, 14);
+    if (customer.visual === "tourist") {
+        fill(126, 83, 48);
+        rect(x + 11, y + 10, 8, 14);
 
-    fill(215, 192, 148);
-    rect(x + 12, y + 17, 6, 4);
-  } else if (customer.visual === "office_worker" || customer.visual === "inn_worker") {
-    fill(39, 42, 48);
-    rect(x - 20, y + 10, 7, 14);
-  } else if (customer.visual === "student") {
-    fill(42, 52, 73);
-    rect(x - 20, y + 10, 7, 15);
-  }
+        fill(215, 192, 148);
+        rect(x + 12, y + 17, 6, 4);
+    } else if (
+        customer.visual === "office_worker" ||
+        customer.visual === "inn_worker"
+    ) {
+        fill(39, 42, 48);
+        rect(x - 20, y + 10, 7, 14);
+    } else if (customer.visual === "student") {
+        fill(42, 52, 73);
+        rect(x - 20, y + 10, 7, 15);
+    }
 
-  fill(231, 196, 166);
-  rect(x - 10, y + 40, 20, 22);
+    fill(231, 196, 166);
+    rect(x - 10, y + 40, 20, 22);
 
-  fill(hair.r, hair.g, hair.b);
-  rect(x - 11, y + 57, 22, 7);
-  rect(x - 11, y + 50, 4, 10);
+    fill(hair.r, hair.g, hair.b);
+    rect(x - 11, y + 57, 22, 7);
+    rect(x - 11, y + 50, 4, 10);
 
-  fill(35, 31, 31);
-  rect(x - 5, y + 51, 2, 2);
-  rect(x + 3, y + 51, 2, 2);
+    fill(35, 31, 31);
+    rect(x - 5, y + 51, 2, 2);
+    rect(x + 3, y + 51, 2, 2);
 
-  const pleased =
-    (model.state === STATE.FIRST_RESULT && model.canSecond) ||
-    (model.state === STATE.SECOND_RESULT && !model.message.includes("許して"));
+    const pleased =
+        (model.state === STATE.FIRST_RESULT && model.canSecond) ||
+        (
+            model.state === STATE.SECOND_RESULT &&
+            !model.message.includes("急いでいた")
+        );
 
-  if (pleased) {
-    rect(x - 3, y + 45, 6, 2);
-  } else if (model.state === STATE.FIRST_RESULT && !model.canSecond) {
-    rect(x - 3, y + 46, 6, 2);
-  } else {
-    rect(x - 2, y + 45, 4, 1);
-  }
+    if (pleased) {
+        rect(x - 3, y + 45, 6, 2);
+    } else if (model.state === STATE.FIRST_RESULT && !model.canSecond) {
+        rect(x - 3, y + 46, 6, 2);
+    } else {
+        rect(x - 2, y + 45, 4, 1);
+    }
 
-  if (customer.visual === "student") {
-    noFill();
-    stroke(119, 139, 174);
-    strokeWidth(2);
-    rect(x - 14, y + 42, 28, 25);
-    noStroke();
-  }
+    if (customer.visual === "student") {
+        noFill();
+        stroke(119, 139, 174);
+        strokeWidth(2);
+        rect(x - 14, y + 42, 28, 25);
+        noStroke();
+    }
+
+    if (model.activeRelationEvent && model.eventGuest) {
+        drawRelationGuest(model.eventGuest, x - 35, y + 1);
+    }
 }
+
 
 function drawUI() {
     rectMode(CORNER);
@@ -1256,7 +1322,44 @@ function drawDecisionButtons() {
     const close = buttons.close;
     const more = buttons.more;
 
-    // 上段：今日はここまで
+    const isRelationDecision =
+        model.activeRelationEvent &&
+        model.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI &&
+        model.activeRelationEvent.phase === "DECISION";
+
+    if (isRelationDecision) {
+        fill(72, 51, 39);
+        rect(close.x, close.y, close.w, close.h);
+
+        fill(229, 216, 188);
+        rect(close.x + 3, close.y + 3, close.w - 6, close.h - 6);
+
+        fill(76, 51, 40);
+        textSize(11);
+        textAlign("center");
+        text("ここで会計にする", GAME_W / 2, textYFromTop(238));
+
+        fill(118, 91, 71);
+        textSize(7);
+        text("湯冷めしないうちに、宿へ戻す", GAME_W / 2, textYFromTop(249));
+
+        fill(111, 61, 43);
+        rect(more.x, more.y, more.w, more.h);
+
+        fill(206, 130, 77);
+        rect(more.x + 3, more.y + 3, more.w - 6, more.h - 6);
+
+        fill(255, 243, 217);
+        textSize(10);
+        text("もう一皿すすめる　+¥160", GAME_W / 2, textYFromTop(289));
+
+        fill(255, 231, 194);
+        textSize(7);
+        text("話は続く。でも、少し遅くなる", GAME_W / 2, textYFromTop(300));
+
+        return;
+    }
+
     fill(72, 51, 39);
     rect(close.x, close.y, close.w, close.h);
 
@@ -1272,7 +1375,6 @@ function drawDecisionButtons() {
     textSize(7);
     text("会計にして、送り出す", GAME_W / 2, textYFromTop(249));
 
-    // 下段：もう一品すすめる
     fill(111, 61, 43);
     rect(more.x, more.y, more.w, more.h);
 
@@ -1287,6 +1389,7 @@ function drawDecisionButtons() {
     textSize(7);
     text("今夜なら、もう少しいける？", GAME_W / 2, textYFromTop(300));
 }
+
 
 
 function drawTapToNext() {
@@ -1435,5 +1538,437 @@ function drawSummary() {
     textSize(9);
     text("明日のれんを出す", GAME_W / 2, 50);
 }
+
+const RELATION_EVENT_IDS = {
+    NOMURA_YUKI: "NOMURA_YUKI"
+};
+
+function findCustomerById(customerId) {
+    return CUSTOMERS_DB.find(customer => customer.id === customerId);
+}
+
+function findIngredientById(ingredientId) {
+    return INGREDIENTS.find(ingredient => ingredient.id === ingredientId);
+}
+
+GameModel.prototype.reset = function() {
+    this.state = STATE.TITLE;
+
+    this.day = 1;
+    this.sales = 0;
+    this.totalSales = 0;
+    this.satisfaction = 0;
+    this.regulars = 0;
+    this.shopWarmth = 0;
+
+    this.soldCounts = {};
+    this.customerMemory = {};
+
+    this.customers = [];
+    this.currentIndex = 0;
+    this.currentCustomer = null;
+
+    this.options = [];
+    this.secondOptions = [];
+    this.message = "";
+
+    this.animT = 0;
+    this.customerX = GAME_W + 50;
+    this.canSecond = false;
+
+    this.night = null;
+    this.pendingNight = null;
+    this.lastNightId = "";
+
+    this.dayClosingLine = "";
+    this.tomorrowHint = "";
+
+    this.shopFlow = {
+        station: 0,
+        onsen: 0,
+        banquet: 0,
+        shelter: 0
+    };
+
+    this.storyFlags = {
+        nomuraYukiSeen: false,
+        nomuraYukiOutcome: ""
+    };
+
+    this.relationEventToday = null;
+    this.activeRelationEvent = null;
+    this.eventGuest = null;
+    this.skipCustomerIds = {};
+    this.eventLog = "";
+};
+
+GameModel.prototype.adjustShopFlow = function(flowId, amount) {
+    if (this.shopFlow[flowId] === undefined) {
+        this.shopFlow[flowId] = 0;
+    }
+
+    this.shopFlow[flowId] = clampValue(
+        this.shopFlow[flowId] + amount,
+        -8,
+        12
+    );
+};
+
+GameModel.prototype.prepareRelationEvent = function() {
+    if (this.storyFlags.nomuraYukiSeen) return;
+    if (this.day < 2) return;
+
+    const shouldAppear = this.day >= 4 || Math.random() < 0.55;
+
+    if (!shouldAppear) return;
+
+    const nomura = findCustomerById("NONOMURA");
+    const yuki = findCustomerById("YUKI");
+
+    if (!nomura || !yuki) return;
+
+    const others = [];
+
+    for (const customer of this.customers) {
+        if (customer.id !== "NONOMURA" && customer.id !== "YUKI") {
+            others.push(customer);
+        }
+    }
+
+    for (const customer of CUSTOMERS_DB) {
+        const alreadyAdded = others.some(other => other.id === customer.id);
+
+        if (
+            customer.id !== "NONOMURA" &&
+            customer.id !== "YUKI" &&
+            !alreadyAdded &&
+            others.length < 2
+        ) {
+            others.push(customer);
+        }
+    }
+
+    this.customers = [
+        nomura,
+        yuki,
+        ...others.slice(0, 2)
+    ];
+
+    this.relationEventToday = {
+        id: RELATION_EVENT_IDS.NOMURA_YUKI,
+        started: false,
+        completed: false,
+        phase: "INTRO",
+        firstDishId: "",
+        finalChoice: ""
+    };
+};
+
+GameModel.prototype.beginDay = function() {
+    this.sales = 0;
+    this.satisfaction = 0;
+    this.soldCounts = {};
+
+    this.currentIndex = 0;
+    this.currentCustomer = null;
+    this.options = [];
+    this.secondOptions = [];
+    this.message = "";
+    this.canSecond = false;
+
+    this.activeRelationEvent = null;
+    this.relationEventToday = null;
+    this.eventGuest = null;
+    this.skipCustomerIds = {};
+    this.eventLog = "";
+
+    this.night = this.pendingNight || this.pickNightContext();
+    this.pendingNight = null;
+
+    this.customers = this.createDailyCustomerList();
+    this.prepareRelationEvent();
+
+    this.regulars = this.getRegularCount();
+};
+
+GameModel.prototype.nextCustomer = function() {
+    while (
+        this.currentIndex < this.customers.length &&
+        this.skipCustomerIds[this.customers[this.currentIndex].id]
+    ) {
+        this.currentIndex++;
+    }
+
+    if (this.currentIndex >= this.customers.length) {
+        this.finishDay();
+        return;
+    }
+
+    if (
+        this.activeRelationEvent &&
+        this.activeRelationEvent.completed
+    ) {
+        this.activeRelationEvent = null;
+        this.eventGuest = null;
+    }
+
+    this.currentCustomer = this.customers[this.currentIndex];
+
+    const memory = this.getCustomerMemory(this.currentCustomer.id);
+
+    memory.visits += 1;
+    memory.lastVisitDay = this.day;
+
+    const isNomuraYukiEvent =
+        this.relationEventToday &&
+        !this.relationEventToday.started &&
+        this.relationEventToday.id === RELATION_EVENT_IDS.NOMURA_YUKI &&
+        this.currentCustomer.id === "NONOMURA";
+
+    if (isNomuraYukiEvent) {
+        this.relationEventToday.started = true;
+        this.storyFlags.nomuraYukiSeen = true;
+
+        this.activeRelationEvent = this.relationEventToday;
+        this.eventGuest = findCustomerById("YUKI");
+        this.skipCustomerIds.YUKI = true;
+
+        this.message =
+            "こちら、ユキさん。宿のお客さんでね。\n" +
+            "湯上がりに、二人でつつけるものを。";
+    } else {
+        this.message = this.getArrivalLine(this.currentCustomer);
+    }
+
+    this.state = STATE.ARRIVAL;
+    this.animT = 0;
+    this.customerX = GAME_W + 50;
+};
+
+GameModel.prototype.createFirstOptions = function() {
+    if (
+        this.activeRelationEvent &&
+        this.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI
+    ) {
+        const ganmo = findIngredientById("GANMODOKI");
+        const daikon = findIngredientById("DAIKON");
+        const beef = findIngredientById("BEEF_TENDON");
+
+        this.options = [ganmo, daikon, beef]
+            .filter(Boolean)
+            .sort(() => Math.random() - 0.5);
+
+        return;
+    }
+
+    const customer = this.currentCustomer;
+
+    let ideal = INGREDIENTS.filter(item =>
+        customer.idealFirst.includes(item.id)
+    );
+
+    let okay = INGREDIENTS.filter(item =>
+        customer.okayFirst.includes(item.id)
+    );
+
+    let bad = INGREDIENTS.filter(item =>
+        customer.badFirst.includes(item.id)
+    );
+
+    if (ideal.length === 0) ideal = [INGREDIENTS[0]];
+    if (okay.length === 0) okay = [INGREDIENTS[1]];
+    if (bad.length === 0) bad = [INGREDIENTS[2]];
+
+    const pickRandom = array => {
+        return array[Math.floor(Math.random() * array.length)];
+    };
+
+    this.options = [
+        pickRandom(ideal),
+        pickRandom(okay),
+        pickRandom(bad)
+    ].sort(() => Math.random() - 0.5);
+};
+
+GameModel.prototype.resolveRelationEventFirst = function(idx) {
+    const dish = this.options[idx];
+    const event = this.activeRelationEvent;
+
+    if (!dish || !event) return;
+
+    event.firstDishId = dish.id;
+
+    this.recordSale(dish);
+
+    if (dish.id === "GANMODOKI") {
+        this.satisfaction += 3;
+        this.adjustShopFlow("onsen", 2);
+
+        event.phase = "DECISION";
+        this.canSecond = true;
+
+        this.message =
+            "野々村さんが笑った。\n" +
+            "「これなら、宿に戻る前にちょうどいいね」";
+    } else if (dish.id === "DAIKON") {
+        this.satisfaction += 1;
+        this.adjustShopFlow("onsen", 1);
+
+        event.phase = "DECISION";
+        this.canSecond = true;
+
+        this.message =
+            "ユキさんが、湯気を見つめている。\n" +
+            "「やさしいですね。町の夜って感じがします」";
+    } else {
+        this.satisfaction -= 1;
+        this.adjustShopFlow("onsen", -1);
+
+        event.phase = "RESOLVED";
+        this.canSecond = false;
+
+        this.storyFlags.nomuraYukiOutcome = "HEAVY";
+        this.eventLog =
+            "湯上がりの二人は、少し早く席を立った。";
+
+        this.message =
+            "ユキさんが、小さく笑った。\n" +
+            "「おいしそう。でも、湯上がりには少し重いかも」";
+    }
+
+    this.state = STATE.FIRST_RESULT;
+};
+
+GameModel.prototype.resolveFirst = function(idx) {
+    if (
+        this.activeRelationEvent &&
+        this.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI
+    ) {
+        this.resolveRelationEventFirst(idx);
+        return;
+    }
+
+    const dish = this.options[idx];
+    const customer = this.currentCustomer;
+
+    if (customer.idealFirst.includes(dish.id)) {
+        this.recordSale(dish);
+        this.satisfaction += 3;
+        this.adjustTrust(customer, 2);
+
+        this.message = customer.successLine;
+        this.state = STATE.FIRST_RESULT;
+        this.canSecond = true;
+    } else if (customer.okayFirst.includes(dish.id)) {
+        this.recordSale(dish);
+        this.satisfaction += 1;
+        this.adjustTrust(customer, 1);
+
+        this.message = customer.okayLine;
+        this.state = STATE.FIRST_RESULT;
+        this.canSecond = true;
+    } else {
+        this.satisfaction -= 1;
+        this.adjustTrust(customer, -2);
+
+        this.message = customer.missLine;
+        this.state = STATE.FIRST_RESULT;
+        this.canSecond = false;
+    }
+};
+
+GameModel.prototype.resolveRelationEventDecision = function(choice) {
+    const event = this.activeRelationEvent;
+
+    if (!event) return;
+
+    event.finalChoice = choice;
+    event.phase = "RESOLVED";
+
+    if (choice === "CLOSE") {
+        this.satisfaction += 1;
+        this.adjustShopFlow("onsen", 2);
+
+        this.storyFlags.nomuraYukiOutcome = "WARM";
+        this.eventLog =
+            "湯上がりの灯が、少し増えた。";
+
+        this.message =
+            "野々村さんは、湯気の向こうでうなずいた。\n" +
+            "ユキさんは、提灯を一度だけ振り返った。";
+    } else {
+        const extraPrice = 160;
+
+        this.sales += extraPrice;
+        this.totalSales += extraPrice;
+        this.soldCounts["小皿"] = (this.soldCounts["小皿"] || 0) + 1;
+
+        this.satisfaction -= 1;
+        this.adjustShopFlow("onsen", -1);
+
+        this.storyFlags.nomuraYukiOutcome = "LATE";
+        this.eventLog =
+            "売上は増えたが、湯上がりの灯は少し揺れた。";
+
+        this.message =
+            "もう一皿は、きれいに空になった。\n" +
+            "ただ、宿へ戻る足取りは少しだけ急いでいた。";
+    }
+
+    this.state = STATE.SECOND_RESULT;
+};
+
+GameModel.prototype.depart = function() {
+    if (this.activeRelationEvent) {
+        this.activeRelationEvent.completed = true;
+    }
+
+    this.state = STATE.DEPARTURE;
+    this.animT = 0;
+};
+
+GameModel.prototype.finishDay = function() {
+    this.pendingNight = this.pickNightContext();
+
+    this.dayClosingLine = this.eventLog || this.buildDayClosingLine();
+    this.tomorrowHint =
+        `明日の気配：${this.pendingNight.label}\n` +
+        this.pendingNight.forecast;
+
+    this.state = STATE.SUMMARY;
+};
+
+function drawRelationGuest(customer, x, y) {
+    if (!customer) return;
+
+    fill(10, 13, 19, 90);
+    rectMode(CORNER);
+    rect(x - 16, y, 32, 4);
+
+    fill(84, 108, 126);
+    rect(x - 13, y + 3, 26, 35);
+
+    fill(211, 180, 128);
+    rect(x - 5, y + 34, 10, 8);
+
+    fill(231, 196, 166);
+    rect(x - 9, y + 39, 18, 21);
+
+    fill(108, 78, 50);
+    rect(x - 10, y + 56, 20, 7);
+    rect(x - 10, y + 49, 4, 10);
+
+    fill(35, 31, 31);
+    rect(x - 5, y + 50, 2, 2);
+    rect(x + 3, y + 50, 2, 2);
+    rect(x - 2, y + 44, 4, 1);
+
+    fill(126, 83, 48);
+    rect(x + 10, y + 10, 7, 14);
+
+    fill(215, 192, 148);
+    rect(x + 11, y + 17, 5, 4);
+}
+
 
 
