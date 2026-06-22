@@ -313,95 +313,120 @@ function isInside(x, y, rx, ry, rw, rh) {
   return x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
 }
 
-function getChoiceCardRect(index, count) {
-  if (count === 2) {
-    return { x: 10, y: 24 + index * 47, w: 160, h: 42 };
-  }
-
-  return { x: 10, y: 10 + index * 38, w: 160, h: 34 };
+function rectFromTop(x, topY, w, h) {
+    return {
+        x: x,
+        y: GAME_H - topY - h,
+        w: w,
+        h: h
+    };
 }
+
+function textYFromTop(topY) {
+    return GAME_H - topY;
+}
+
+function getDecisionButtonRects() {
+    return {
+        close: rectFromTop(10, 217, 160, 40),
+        more: rectFromTop(10, 268, 160, 40)
+    };
+}
+
+
+function getChoiceCardRect(index, count) {
+    if (count === 2) {
+        // 上から 0番目、1番目の順に並べる
+        return rectFromTop(10, 222 + index * 48, 160, 42);
+    }
+
+    // 上から options[0]、options[1]、options[2] の順に並べる
+    return rectFromTop(10, 204 + index * 38, 160, 34);
+}
+
 
 // ==========================================
 // Game Logic
 // ==========================================
 function handleTap(x, y) {
-  switch (model.state) {
-    case STATE.TITLE:
-      model.reset();
-      model.nextCustomer();
-      lockInput();
-      break;
+    switch (model.state) {
+        case STATE.TITLE:
+            model.reset();
+            model.nextCustomer();
+            lockInput();
+            break;
 
-    case STATE.ARRIVAL:
-      if (model.animT > 0.3) {
-        model.animT = 1;
-      }
-      break;
+        case STATE.ARRIVAL:
+            if (model.animT > 0.3) model.animT = 1;
+            break;
 
-    case STATE.FIRST_CHOICE:
-      for (let i = 0; i < 3; i++) {
-        const card = getChoiceCardRect(i, 3);
+        case STATE.FIRST_CHOICE:
+            for (let i = 0; i < 3; i++) {
+                const card = getChoiceCardRect(i, 3);
 
-        if (isInside(x, y, card.x, card.y, card.w, card.h)) {
-          model.resolveFirst(i);
-          lockInput();
-          break;
+                if (isInside(x, y, card.x, card.y, card.w, card.h)) {
+                    model.resolveFirst(i);
+                    lockInput();
+                    break;
+                }
+            }
+            break;
+
+        case STATE.FIRST_RESULT:
+            if (model.canSecond) {
+                model.state = STATE.SECOND_DECISION;
+            } else {
+                model.depart();
+            }
+
+            lockInput();
+            break;
+
+        case STATE.SECOND_DECISION: {
+            const buttons = getDecisionButtonRects();
+
+            if (isInside(x, y, buttons.close.x, buttons.close.y, buttons.close.w, buttons.close.h)) {
+                model.message = "まいどあり。気をつけて。";
+                model.state = STATE.SECOND_RESULT;
+                lockInput();
+            } else if (isInside(x, y, buttons.more.x, buttons.more.y, buttons.more.w, buttons.more.h)) {
+                model.createSecondOptions();
+                model.state = STATE.SECOND_CHOICE;
+                lockInput();
+            }
+            break;
         }
-      }
-      break;
 
-    case STATE.FIRST_RESULT:
-      if (model.canSecond) {
-        model.state = STATE.SECOND_DECISION;
-      } else {
-        model.depart();
-      }
-      lockInput();
-      break;
+        case STATE.SECOND_CHOICE:
+            for (let i = 0; i < 2; i++) {
+                const card = getChoiceCardRect(i, 2);
 
-    case STATE.SECOND_DECISION:
-      if (isInside(x, y, 10, 28, 160, 40)) {
-        model.message = "まいどあり。気をつけて。";
-        model.state = STATE.SECOND_RESULT;
-        lockInput();
-      } else if (isInside(x, y, 10, 77, 160, 40)) {
-        model.createSecondOptions();
-        model.state = STATE.SECOND_CHOICE;
-        lockInput();
-      }
-      break;
+                if (isInside(x, y, card.x, card.y, card.w, card.h)) {
+                    model.resolveSecond(i);
+                    lockInput();
+                    break;
+                }
+            }
+            break;
 
-    case STATE.SECOND_CHOICE:
-      for (let i = 0; i < 2; i++) {
-        const card = getChoiceCardRect(i, 2);
+        case STATE.SECOND_RESULT:
+            model.depart();
+            lockInput();
+            break;
 
-        if (isInside(x, y, card.x, card.y, card.w, card.h)) {
-          model.resolveSecond(i);
-          lockInput();
-          break;
-        }
-      }
-      break;
+        case STATE.DEPARTURE:
+            if (model.animT > 0.3) model.animT = 1;
+            break;
 
-    case STATE.SECOND_RESULT:
-      model.depart();
-      lockInput();
-      break;
-
-    case STATE.DEPARTURE:
-      if (model.animT > 0.3) {
-        model.animT = 1;
-      }
-      break;
-
-    case STATE.SUMMARY:
-      if (isInside(x, y, 33, 45, 114, 26)) {
-        model.state = STATE.TITLE;
-        lockInput();
-      }
-      break;
-  }
+        case STATE.SUMMARY:
+            if (isInside(x, y, 33, 45, 114, 26)) {
+                model.state = STATE.TITLE;
+                lockInput();
+            }
+            break;
+    }
 }
+
 
 // ==========================================
 // Drawing
@@ -581,97 +606,101 @@ function drawBackground() {
 }
 
 function drawStall() {
-  rectMode(CORNER);
-  noStroke();
+    rectMode(CORNER);
+    noStroke();
 
-  fill(46, 33, 32);
-  rect(8, 206, 118, 62);
+    fill(46, 33, 32);
+    rect(8, 206, 118, 62);
 
-  fill(68, 45, 39);
-  rect(12, 210, 110, 54);
+    fill(68, 45, 39);
+    rect(12, 210, 110, 54);
 
-  fill(122, 57, 47);
-  rect(16, 225, 45, 29);
-  rect(63, 225, 45, 29);
-  rect(110, 225, 8, 29);
+    fill(122, 57, 47);
+    rect(16, 225, 45, 29);
+    rect(63, 225, 45, 29);
+    rect(110, 225, 8, 29);
 
-  fill(239, 221, 184);
-  rect(22, 232, 32, 14);
+    fill(239, 221, 184);
+    rect(22, 232, 32, 14);
 
-  fill(86, 47, 40);
-  textSize(8);
-  textAlign("center");
-  text("おでん", 38, 235);
+    fill(86, 47, 40);
+    textSize(8);
+    textAlign("center");
+    text("おでん", 38, 235);
 
-  fill(82, 53, 40);
-  rect(5, 178, GAME_W - 10, 9);
+    fill(82, 53, 40);
+    rect(5, 178, GAME_W - 10, 9);
 
-  fill(127, 80, 53);
-  rect(5, 187, GAME_W - 10, 4);
+    fill(127, 80, 53);
+    rect(5, 187, GAME_W - 10, 4);
 
-  fill(72, 46, 37);
-  rect(10, 191, GAME_W - 20, 20);
+    fill(72, 46, 37);
+    rect(10, 191, GAME_W - 20, 20);
 
-  fill(52, 57, 65);
-  rect(18, 196, 112, 31);
+    fill(52, 57, 65);
+    rect(18, 196, 112, 31);
 
-  fill(107, 112, 117);
-  rect(21, 199, 106, 25);
+    fill(107, 112, 117);
+    rect(21, 199, 106, 25);
 
-  fill(48, 50, 55);
-  rect(24, 202, 100, 18);
+    fill(48, 50, 55);
+    rect(24, 202, 100, 18);
 
-  fill(203, 145, 69);
-  rect(26, 204, 96, 14);
+    fill(203, 145, 69);
+    rect(26, 204, 96, 14);
 
-  fill(255, 219, 145, 10 + Math.sin(ElapsedTime * 2) * 3);
-  rect(26, 214, 96, 3);
+    fill(255, 219, 145, 10 + Math.sin(ElapsedTime * 2) * 3);
+    rect(26, 214, 96, 3);
 
-  fill(91, 96, 101);
-  rect(49, 202, 3, 18);
-  rect(75, 202, 3, 18);
-  rect(101, 202, 3, 18);
+    fill(91, 96, 101);
+    rect(49, 202, 3, 18);
+    rect(75, 202, 3, 18);
+    rect(101, 202, 3, 18);
 
-  drawPixelArt(31, 205, ART.daikon, 2);
-  drawPixelArt(57, 205, ART.egg, 2);
-  drawPixelArt(83, 205, ART.ganmo, 2);
-  drawPixelArt(109, 205, ART.chikuwa, 2);
+    drawPixelArt(31, 205, ART.daikon, 2);
+    drawPixelArt(57, 205, ART.egg, 2);
+    drawPixelArt(83, 205, ART.ganmo, 2);
+    drawPixelArt(109, 205, ART.chikuwa, 2);
 
-  const swing = Math.sin(ElapsedTime * 1.6) * 3;
+    // 客の顔に重ならないよう、少し右上へ移動
+    const swing = Math.sin(ElapsedTime * 1.6) * 3;
 
-  pushMatrix();
-  translate(155, 246);
-  rotate(swing);
+    pushMatrix();
+    translate(165, 258);
+    rotate(swing);
 
-  rectMode(CENTER);
+    rectMode(CENTER);
 
-  fill(113, 45, 42);
-  rect(0, 0, 23, 35);
+    fill(113, 45, 42);
+    rect(0, 0, 23, 35);
 
-  fill(188, 71, 59);
-  rect(0, 0, 17, 29);
+    fill(188, 71, 59);
+    rect(0, 0, 17, 29);
 
-  fill(243, 219, 177);
-  rect(0, 7, 12, 2);
+    fill(243, 219, 177);
+    rect(0, 7, 12, 2);
 
-  fill(50, 32, 29);
-  textSize(7);
-  textAlign("center");
-  text("お", 0, -4);
-  text("で", 0, 4);
-  text("ん", 0, 12);
+    fill(50, 32, 29);
+    textSize(7);
+    textAlign("center");
 
-  popMatrix();
+    // CodeaはY軸が下から上なので、表示順は逆に置く
+    text("お", 0, 12);
+    text("で", 0, 4);
+    text("ん", 0, -4);
 
-  rectMode(CORNER);
+    popMatrix();
 
-  fill(244, 240, 226, 30);
-  const steam = Math.sin(ElapsedTime * 1.2) * 3;
+    rectMode(CORNER);
 
-  rect(36, 229 + steam, 8, 15);
-  rect(70, 232 - steam, 10, 17);
-  rect(104, 228 + steam * 0.7, 8, 18);
+    fill(244, 240, 226, 30);
+    const steam = Math.sin(ElapsedTime * 1.2) * 3;
+
+    rect(36, 229 + steam, 8, 15);
+    rect(70, 232 - steam, 10, 17);
+    rect(104, 228 + steam * 0.7, 8, 18);
 }
+
 
 function drawCustomer() {
   if (!model.currentCustomer) return;
@@ -876,38 +905,45 @@ function drawIngredientCards(options, count) {
 }
 
 function drawDecisionButtons() {
-  rectMode(CORNER);
-  noStroke();
+    rectMode(CORNER);
+    noStroke();
 
-  fill(72, 51, 39);
-  rect(10, 28, 160, 40);
+    const buttons = getDecisionButtonRects();
+    const close = buttons.close;
+    const more = buttons.more;
 
-  fill(229, 216, 188);
-  rect(13, 31, 154, 34);
+    // 上段：今日はここまで
+    fill(72, 51, 39);
+    rect(close.x, close.y, close.w, close.h);
 
-  fill(76, 51, 40);
-  textSize(11);
-  textAlign("center");
-  text("今日はここまで", GAME_W / 2, 47);
+    fill(229, 216, 188);
+    rect(close.x + 3, close.y + 3, close.w - 6, close.h - 6);
 
-  fill(118, 91, 71);
-  textSize(7);
-  text("会計にして、送り出す", GAME_W / 2, 37);
+    fill(76, 51, 40);
+    textSize(11);
+    textAlign("center");
+    text("今日はここまで", GAME_W / 2, textYFromTop(238));
 
-  fill(111, 61, 43);
-  rect(10, 77, 160, 40);
+    fill(118, 91, 71);
+    textSize(7);
+    text("会計にして、送り出す", GAME_W / 2, textYFromTop(249));
 
-  fill(206, 130, 77);
-  rect(13, 80, 154, 34);
+    // 下段：もう一品すすめる
+    fill(111, 61, 43);
+    rect(more.x, more.y, more.w, more.h);
 
-  fill(255, 243, 217);
-  textSize(11);
-  text("もう一品すすめる", GAME_W / 2, 96);
+    fill(206, 130, 77);
+    rect(more.x + 3, more.y + 3, more.w - 6, more.h - 6);
 
-  fill(255, 231, 194);
-  textSize(7);
-  text("今夜なら、もう少しいける?", GAME_W / 2, 86);
+    fill(255, 243, 217);
+    textSize(11);
+    text("もう一品すすめる", GAME_W / 2, textYFromTop(289));
+
+    fill(255, 231, 194);
+    textSize(7);
+    text("今夜なら、もう少しいける？", GAME_W / 2, textYFromTop(300));
 }
+
 
 function drawTapToNext() {
   fill(245, 231, 203, 150 + Math.sin(ElapsedTime * 5) * 45);
@@ -917,81 +953,83 @@ function drawTapToNext() {
 }
 
 function drawTitle() {
-  rectMode(CORNER);
-  noStroke();
+    rectMode(CORNER);
+    noStroke();
 
-  fill(18, 22, 33);
-  rect(0, 0, GAME_W, GAME_H);
+    fill(18, 22, 33);
+    rect(0, 0, GAME_W, GAME_H);
 
-  fill(28, 34, 47);
-  rect(0, 190, GAME_W, 130);
+    fill(28, 34, 47);
+    rect(0, 190, GAME_W, 130);
 
-  fill(37, 43, 57);
-  rect(0, 197, 34, 78);
-  rect(42, 197, 28, 96);
-  rect(79, 197, 36, 70);
-  rect(124, 197, 25, 93);
-  rect(156, 197, 24, 72);
+    fill(37, 43, 57);
+    rect(0, 197, 34, 78);
+    rect(42, 197, 28, 96);
+    rect(79, 197, 36, 70);
+    rect(124, 197, 25, 93);
+    rect(156, 197, 24, 72);
 
-  fill(27, 29, 38);
-  rect(0, 0, GAME_W, 191);
+    fill(27, 29, 38);
+    rect(0, 0, GAME_W, 191);
 
-  fill(48, 34, 32);
-  rect(27, 101, 126, 66);
+    fill(48, 34, 32);
+    rect(27, 101, 126, 66);
 
-  fill(68, 45, 39);
-  rect(31, 105, 118, 58);
+    fill(68, 45, 39);
+    rect(31, 105, 118, 58);
 
-  fill(122, 57, 47);
-  rect(35, 123, 47, 30);
-  rect(84, 123, 47, 30);
+    fill(122, 57, 47);
+    rect(35, 123, 47, 30);
+    rect(84, 123, 47, 30);
 
-  fill(55, 58, 66);
-  rect(30, 166, 121, 29);
+    fill(55, 58, 66);
+    rect(30, 166, 121, 29);
 
-  fill(207, 150, 71);
-  rect(34, 170, 113, 17);
+    fill(207, 150, 71);
+    rect(34, 170, 113, 17);
 
-  drawPixelArt(48, 172, ART.daikon, 2);
-  drawPixelArt(83, 172, ART.egg, 2);
-  drawPixelArt(117, 172, ART.ganmo, 2);
+    drawPixelArt(48, 172, ART.daikon, 2);
+    drawPixelArt(83, 172, ART.egg, 2);
+    drawPixelArt(117, 172, ART.ganmo, 2);
 
-  const swing = Math.sin(ElapsedTime * 1.7) * 3;
+    const swing = Math.sin(ElapsedTime * 1.7) * 3;
 
-  pushMatrix();
-  translate(151, 207);
-  rotate(swing);
+    pushMatrix();
+    translate(151, 207);
+    rotate(swing);
 
-  rectMode(CENTER);
+    rectMode(CENTER);
 
-  fill(122, 48, 43);
-  rect(0, 0, 25, 38);
+    fill(122, 48, 43);
+    rect(0, 0, 25, 38);
 
-  fill(190, 70, 59);
-  rect(0, 0, 18, 32);
+    fill(190, 70, 59);
+    rect(0, 0, 18, 32);
 
-  fill(240, 220, 180);
-  textSize(8);
-  textAlign("center");
-  text("おでん", 0, -3);
+    fill(240, 220, 180);
+    textSize(8);
+    textAlign("center");
+    text("おでん", 0, -3);
 
-  popMatrix();
+    popMatrix();
 
-  rectMode(CORNER);
+    rectMode(CORNER);
 
-  fill(245, 233, 207);
-  textSize(24);
-  textAlign("center");
-  text("今夜のおでん", GAME_W / 2, 252);
+    fill(245, 233, 207);
+    textSize(24);
+    textAlign("center");
+    text("今夜のおでん", GAME_W / 2, 252);
 
-  textSize(9);
-  fill(189, 194, 204);
-  text("一品で帰すか、もう一品すすめるか。", GAME_W / 2, 234);
+    textSize(9);
+    fill(189, 194, 204);
+    text("一品で帰すか、もう一品すすめるか。", GAME_W / 2, 234);
 
-  fill(245, 233, 207, 150 + Math.sin(ElapsedTime * 5) * 90);
-  textSize(9);
-  text("タップして、のれんを出す", GAME_W / 2, 43);
+    // 屋台の直後へ寄せ、画面下の空白を少し整える
+    fill(245, 233, 207, 150 + Math.sin(ElapsedTime * 5) * 90);
+    textSize(9);
+    text("タップして、のれんを出す", GAME_W / 2, 58);
 }
+
 
 function drawSummary() {
   rectMode(CORNER);
