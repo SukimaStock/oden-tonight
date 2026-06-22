@@ -883,6 +883,9 @@ function updateAnimations() {
         );
 
         if (model.animT === 1) {
+            // ここでも確認することで、日次パッチの順序に依存しない
+            model.ensurePotForCurrentDay();
+
             model.createFirstOptions();
 
             if (model.hasPotIngredients()) {
@@ -909,6 +912,7 @@ function updateAnimations() {
         }
     }
 }
+
 
 
 
@@ -2018,6 +2022,56 @@ function drawPotHand(isSecondDish) {
         text(`¥${item.price}`, slot.x + slot.w - 5, slot.y + 5);
     }
 }
+
+GameModel.prototype.refillPotForCurrentDay = function() {
+    const shuffled = [...INGREDIENTS].sort(() => Math.random() - 0.5);
+
+    this.potSlots = shuffled.slice(0, 6);
+    this.potDay = this.day;
+
+    if (
+        this.relationEventToday &&
+        this.relationEventToday.id === RELATION_EVENT_IDS.NOMURA_YUKI
+    ) {
+        this.ensurePotContains([
+            "GANMODOKI",
+            "DAIKON",
+            "BEEF_TENDON"
+        ]);
+    }
+};
+
+GameModel.prototype.ensurePotForCurrentDay = function() {
+    const isMissingPot =
+        !Array.isArray(this.potSlots) ||
+        this.potSlots.length !== 6;
+
+    const isOldPot =
+        this.potDay !== this.day;
+
+    if (isMissingPot || isOldPot) {
+        this.refillPotForCurrentDay();
+    }
+};
+
+const startNewRunForPotSafety = GameModel.prototype.startNewRun;
+
+GameModel.prototype.startNewRun = function() {
+    startNewRunForPotSafety.call(this);
+
+    // reset後は day が1に戻るため、前周回の鍋を絶対に持ち越さない
+    this.refillPotForCurrentDay();
+};
+
+const beginNextDayForPotSafety = GameModel.prototype.beginNextDay;
+
+GameModel.prototype.beginNextDay = function() {
+    beginNextDayForPotSafety.call(this);
+
+    // beginDay のパッチ順に関係なく、翌日の鍋を必ず作る
+    this.refillPotForCurrentDay();
+};
+
 
 function drawServedTray() {
     const dishes = model.getCurrentServedDishes();
