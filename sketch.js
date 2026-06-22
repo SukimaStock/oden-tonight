@@ -1269,6 +1269,8 @@ function drawUI() {
     textAlign("right");
     text(model.night ? model.night.label : "横丁の夜", GAME_W - 8, 281);
 
+    drawUpcomingHints();
+
     if (model.message && model.state !== STATE.SUMMARY) {
         fill(17, 21, 29, 238);
         rect(9, 132, 162, 41);
@@ -1318,6 +1320,7 @@ function drawUI() {
         }
     }
 }
+
 
 
 
@@ -1630,6 +1633,274 @@ function getPotDishArt(item) {
     if (!item) return null;
     return ART[item.visual];
 }
+
+function pickPotIngredientByFamily(familyIds) {
+    const candidates = INGREDIENTS.filter(item => {
+        return familyIds.includes(item.id);
+    });
+
+    if (candidates.length === 0) {
+        return INGREDIENTS[0];
+    }
+
+    return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+GameModel.prototype.buildPotForDay = function() {
+    const pot = [];
+
+    // 毎晩の最低限の逃げ道。
+    // 軽い・しみる・景気を一つずつ保証する。
+    pot.push(pickPotIngredientByFamily([
+        "CHIKUWA",
+        "KONNYAKU",
+        "SHIRATAKI"
+    ]));
+
+    pot.push(pickPotIngredientByFamily([
+        "DAIKON",
+        "EGG",
+        "GANMODOKI"
+    ]));
+
+    pot.push(pickPotIngredientByFamily([
+        "BEEF_TENDON",
+        "MOCHI_POUCH"
+    ]));
+
+    // 残り3枠は重複あり。
+    // 鍋の偏りを作り、温存の判断を生む。
+    for (let i = 0; i < 3; i++) {
+        const randomIndex = Math.floor(Math.random() * INGREDIENTS.length);
+        pot.push(INGREDIENTS[randomIndex]);
+    }
+
+    this.potSlots = pot.sort(() => Math.random() - 0.5);
+    this.potDay = this.day;
+
+    // 野々村さんとユキさんの夜だけは、
+    // 二人連れの選択肢がちゃんと鍋に現れるようにする。
+    const isNomuraYukiEvent =
+        this.relationEventToday &&
+        this.relationEventToday.id === RELATION_EVENT_IDS.NOMURA_YUKI;
+
+    if (!isNomuraYukiEvent) {
+        return;
+    }
+
+    const requiredIds = [
+        "GANMODOKI",
+        "DAIKON",
+        "BEEF_TENDON"
+    ];
+
+    for (const requiredId of requiredIds) {
+        const alreadyExists = this.potSlots.some(item => {
+            return item && item.id === requiredId;
+        });
+
+        if (alreadyExists) {
+            continue;
+        }
+
+        const replacement = INGREDIENTS.find(item => {
+            return item.id === requiredId;
+        });
+
+        if (!replacement) {
+            continue;
+        }
+
+        const protectedIds = requiredIds.filter(id => {
+            return this.potSlots.some(item => item && item.id === id);
+        });
+
+        let replaceIndex = this.potSlots.findIndex(item => {
+            return item && !protectedIds.includes(item.id);
+        });
+
+        if (replaceIndex < 0) {
+            replaceIndex = this.potSlots.findIndex(item => item !== null);
+        }
+
+        if (replaceIndex >= 0) {
+            this.potSlots[replaceIndex] = replacement;
+        }
+    }
+};
+
+GameModel.prototype.refillPotForCurrentDay = function() {
+    this.buildPotForDay();
+};
+
+GameModel.prototype.ensurePotForCurrentDay = function() {
+    const potIsMissing =
+        !Array.isArray(this.potSlots) ||
+        this.potSlots.length !== 6;
+
+    const potIsFromAnotherDay =
+        this.potDay !== this.day;
+
+    if (potIsMissing || potIsFromAnotherDay) {
+        this.refillPotForCurrentDay();
+    }
+};
+
+
+const POT_FAMILIES = {
+    LIGHT: ["CHIKUWA", "KONNYAKU", "SHIRATAKI"],
+    WARM: ["DAIKON", "EGG", "GANMODOKI"],
+    FEAST: ["BEEF_TENDON", "MOCHI_POUCH"]
+};
+
+const CUSTOMER_HINTS = {
+    SAEKI: {
+        mark: "◷",
+        label: "時計の影"
+    },
+    MINATO: {
+        mark: "￥",
+        label: "財布の影"
+    },
+    TOYAMA: {
+        mark: "♪",
+        label: "祝杯の気配"
+    },
+    NONOMURA: {
+        mark: "宿",
+        label: "宿の羽織"
+    },
+    YUKI: {
+        mark: "♨",
+        label: "湯上がり"
+    },
+    KOTA: {
+        mark: "雨",
+        label: "濡れた鞄"
+    }
+};
+
+function pickIngredientFromIds(ids) {
+    const candidates = INGREDIENTS.filter(item => ids.includes(item.id));
+
+    if (candidates.length === 0) {
+        return INGREDIENTS[0];
+    }
+
+    return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function getIngredientFamily(item) {
+    if (!item) return "LIGHT";
+
+    if (POT_FAMILIES.LIGHT.includes(item.id)) return "LIGHT";
+    if (POT_FAMILIES.WARM.includes(item.id)) return "WARM";
+    if (POT_FAMILIES.FEAST.includes(item.id)) return "FEAST";
+
+    return "LIGHT";
+}
+
+function getIngredientFamilyLabel(item) {
+    const family = getIngredientFamily(item);
+
+    if (family === "WARM") return "しみる";
+    if (family === "FEAST") return "景気";
+
+    return "軽い";
+}
+
+function getIngredientFamilyColor(item) {
+    const family = getIngredientFamily(item);
+
+    if (family === "WARM") {
+        return { r: 126, g: 78, b: 48 };
+    }
+
+    if (family === "FEAST") {
+        return { r: 117, g: 55, b: 48 };
+    }
+
+    return { r: 78, g: 91, b: 99 };
+}
+
+GameModel.prototype.getUpcomingCustomerHints = function(count) {
+    const hints = [];
+    const skipIds = this.skipCustomerIds || {};
+
+    for (
+        let i = this.currentIndex + 1;
+        i < this.customers.length && hints.length < count;
+        i++
+    ) {
+        const customer = this.customers[i];
+
+        if (!customer) continue;
+        if (skipIds[customer.id]) continue;
+
+        if (
+            this.eventGuest &&
+            customer.id === this.eventGuest.id
+        ) {
+            continue;
+        }
+
+        const hint = CUSTOMER_HINTS[customer.id];
+
+        if (hint) {
+            hints.push(hint);
+        }
+    }
+
+    return hints;
+};
+
+function drawUpcomingHints() {
+    if (
+        model.state === STATE.TITLE ||
+        model.state === STATE.SUMMARY ||
+        !model.currentCustomer
+    ) {
+        return;
+    }
+
+    const hints = model.getUpcomingCustomerHints(2);
+
+    if (hints.length === 0) return;
+
+    rectMode(CORNER);
+    noStroke();
+
+    fill(14, 18, 26, 218);
+    rect(9, 260, 162, 17);
+
+    fill(94, 71, 56);
+    rect(9, 275, 162, 2);
+
+    fill(187, 175, 151);
+    textSize(7);
+    textAlign("left");
+    text("次の気配", 15, 266);
+
+    let cursorX = 52;
+
+    for (let i = 0; i < hints.length; i++) {
+        const hint = hints[i];
+
+        fill(238, 219, 184);
+        textSize(7);
+        textAlign("left");
+        text(`${hint.mark} ${hint.label}`, cursorX, 266);
+
+        cursorX += i === 0 ? 59 : 0;
+
+        if (i === 0 && hints.length > 1) {
+            fill(105, 110, 118);
+            text("|", 106, 266);
+            cursorX = 114;
+        }
+    }
+}
+
 
 GameModel.prototype.buildPotForDay = function() {
     const shuffled = [...INGREDIENTS].sort(() => Math.random() - 0.5);
@@ -1966,10 +2237,14 @@ function drawPotHand(isSecondDish) {
     fill(238, 188, 101, 22);
     rect(16, 14, 148, 95);
 
+    const remainingCount = model.potSlots
+        ? model.potSlots.filter(item => item !== null).length
+        : 0;
+
     fill(245, 231, 202);
     textSize(9);
     textAlign("left");
-    text("鍋の中", 17, 113);
+    text(`鍋の中　残り ${remainingCount}`, 17, 113);
 
     fill(231, 213, 175);
     textSize(7);
@@ -2004,6 +2279,20 @@ function drawPotHand(isSecondDish) {
         fill(255, 220, 149, 32);
         rect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4);
 
+        const familyColor = getIngredientFamilyColor(item);
+
+        fill(familyColor.r, familyColor.g, familyColor.b, 210);
+        rect(slot.x + 3, slot.y + slot.h - 8, 20, 5);
+
+        fill(255, 243, 217);
+        textSize(5);
+        textAlign("center");
+        text(
+            getIngredientFamilyLabel(item),
+            slot.x + 13,
+            slot.y + slot.h - 7
+        );
+
         drawPixelArt(
             slot.x + 7,
             slot.y + 7,
@@ -2022,6 +2311,7 @@ function drawPotHand(isSecondDish) {
         text(`¥${item.price}`, slot.x + slot.w - 5, slot.y + 5);
     }
 }
+
 
 GameModel.prototype.refillPotForCurrentDay = function() {
     const shuffled = [...INGREDIENTS].sort(() => Math.random() - 0.5);
