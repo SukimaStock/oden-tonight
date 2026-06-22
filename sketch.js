@@ -862,30 +862,36 @@ function draw() {
 }
 
 function updateAnimations() {
-  model.animT += DeltaTime * 1.5;
+    model.animT += DeltaTime * 1.5;
 
-  if (model.animT > 1) {
-    model.animT = 1;
-  }
-
-  const targetX = 140;
-
-  if (model.state === STATE.ARRIVAL) {
-    model.customerX = lerp(GAME_W + 40, targetX, easeOut(model.animT));
-
-    if (model.animT === 1) {
-      model.createFirstOptions();
-      model.state = STATE.FIRST_CHOICE;
+    if (model.animT > 1) {
+        model.animT = 1;
     }
-  } else if (model.state === STATE.DEPARTURE) {
-    model.customerX = lerp(targetX, -40, easeIn(model.animT));
 
-    if (model.animT === 1) {
-      model.currentIndex++;
-      model.nextCustomer();
+    const hasRelationPair =
+        model.activeRelationEvent &&
+        model.eventGuest;
+
+    // 二人連れの夜だけ、右側の空いた場所へ二人を並べる
+    const targetX = hasRelationPair ? 130 : 140;
+
+    if (model.state === STATE.ARRIVAL) {
+        model.customerX = lerp(GAME_W + 40, targetX, easeOut(model.animT));
+
+        if (model.animT === 1) {
+            model.createFirstOptions();
+            model.state = STATE.FIRST_CHOICE;
+        }
+    } else if (model.state === STATE.DEPARTURE) {
+        model.customerX = lerp(targetX, -40, easeIn(model.animT));
+
+        if (model.animT === 1) {
+            model.currentIndex++;
+            model.nextCustomer();
+        }
     }
-  }
 }
+
 
 function easeOut(t) {
   return t * (2 - t);
@@ -1059,31 +1065,29 @@ function drawStall() {
     drawPixelArt(83, 205, ART.ganmo, 2);
     drawPixelArt(109, 205, ART.chikuwa, 2);
 
-    // 客の顔に重ならないよう、少し右上へ移動
+    // 二人連れの夜でも顔に重ならない、少し細い提灯。
     const swing = Math.sin(ElapsedTime * 1.6) * 3;
 
     pushMatrix();
-    translate(165, 258);
+    translate(171, 258);
     rotate(swing);
 
     rectMode(CENTER);
 
     fill(113, 45, 42);
-    rect(0, 0, 23, 35);
+    rect(0, 0, 18, 33);
 
     fill(188, 71, 59);
-    rect(0, 0, 17, 29);
+    rect(0, 0, 13, 27);
 
     fill(243, 219, 177);
-    rect(0, 7, 12, 2);
+    rect(0, 7, 9, 2);
 
     fill(50, 32, 29);
-    textSize(7);
+    textSize(6);
     textAlign("center");
-
-    // CodeaはY軸が下から上なので、表示順は逆に置く
-    text("お", 0, 12);
-    text("で", 0, 4);
+    text("お", 0, 10);
+    text("で", 0, 3);
     text("ん", 0, -4);
 
     popMatrix();
@@ -1097,6 +1101,7 @@ function drawStall() {
     rect(70, 232 - steam, 10, 17);
     rect(104, 228 + steam * 0.7, 8, 18);
 }
+
 
 
 function drawCustomer() {
@@ -1191,10 +1196,17 @@ function drawCustomer() {
         noStroke();
     }
 
+    // ユキさんは野々村さんの少し後ろ、右側に並べる。
+    // 鍋と屋台の建物に隠れない高さへ少し持ち上げる。
     if (model.activeRelationEvent && model.eventGuest) {
-        drawRelationGuest(model.eventGuest, x - 35, y + 1);
+        drawRelationGuest(
+            model.eventGuest,
+            x + 24,
+            y + 4
+        );
     }
 }
+
 
 
 function drawUI() {
