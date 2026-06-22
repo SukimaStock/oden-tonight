@@ -283,6 +283,347 @@ function setup() {
   resized();
 }
 
+const NIGHT_CONTEXTS = [
+    {
+        id: "RAIN",
+        label: "雨の夜",
+        intro: "雨音が、屋台の屋根を細く叩いている。",
+        forecast: "明日は少し、雲が切れそうだ。"
+    },
+    {
+        id: "COLD",
+        label: "冷える夜",
+        intro: "吐く息が白く、だしの湯気がいつもより濃い。",
+        forecast: "明日も、帰り道は冷えそうだ。"
+    },
+    {
+        id: "BUSY",
+        label: "にぎやかな夜",
+        intro: "温泉帰りの人影が、通りをゆっくり流れている。",
+        forecast: "明日は少し、横丁が静かになりそうだ。"
+    },
+    {
+        id: "QUIET",
+        label: "静かな夜",
+        intro: "通りの足音が少なく、提灯だけが揺れている。",
+        forecast: "明日は、誰かが少し遅れて帰ってくるかもしれない。"
+    }
+];
+
+function clampValue(value, minValue, maxValue) {
+    return Math.max(minValue, Math.min(maxValue, value));
+}
+
+GameModel.prototype.reset = function() {
+    this.state = STATE.TITLE;
+
+    this.day = 1;
+    this.sales = 0;
+    this.totalSales = 0;
+    this.satisfaction = 0;
+    this.regulars = 0;
+    this.shopWarmth = 0;
+
+    this.soldCounts = {};
+    this.customerMemory = {};
+
+    this.customers = [];
+    this.currentIndex = 0;
+    this.currentCustomer = null;
+
+    this.options = [];
+    this.secondOptions = [];
+    this.message = "";
+
+    this.animT = 0;
+    this.customerX = GAME_W + 50;
+    this.canSecond = false;
+
+    this.night = null;
+    this.pendingNight = null;
+    this.lastNightId = "";
+
+    this.dayClosingLine = "";
+    this.tomorrowHint = "";
+};
+
+GameModel.prototype.startNewRun = function() {
+    this.reset();
+    this.beginDay();
+    this.nextCustomer();
+};
+
+GameModel.prototype.getCustomerMemory = function(customerId) {
+    if (!this.customerMemory[customerId]) {
+        this.customerMemory[customerId] = {
+            trust: 0,
+            visits: 0,
+            lastDish: "",
+            lastVisitDay: 0,
+            lastServedDay: 0
+        };
+    }
+
+    return this.customerMemory[customerId];
+};
+
+GameModel.prototype.getRegularCount = function() {
+    let count = 0;
+
+    for (const customer of CUSTOMERS_DB) {
+        const memory = this.getCustomerMemory(customer.id);
+
+        if (memory.trust >= 3) {
+            count++;
+        }
+    }
+
+    return count;
+};
+
+GameModel.prototype.pickNightContext = function() {
+    let candidates = NIGHT_CONTEXTS.filter(context => context.id !== this.lastNightId);
+
+    if (candidates.length === 0) {
+        candidates = NIGHT_CONTEXTS;
+    }
+
+    const picked = candidates[Math.floor(Math.random() * candidates.length)];
+
+    this.lastNightId = picked.id;
+
+    return picked;
+};
+
+GameModel.prototype.getCustomerWeight = function(customer) {
+    const memory = this.getCustomerMemory(customer.id);
+    const daysSinceVisit = this.day - memory.lastVisitDay;
+
+    let weight = 1.0;
+
+    if (memory.visits === 0) {
+        weight += 0.9;
+    }
+
+    if (memory.trust >= 3) {
+        weight += 1.3;
+    } else if (memory.trust > 0) {
+        weight += 0.45;
+    }
+
+    if (memory.trust <= -2) {
+        weight *= 0.45;
+    }
+
+    if (memory.lastVisitDay === this.day - 1) {
+        weight *= 0.6;
+    }
+
+    if (daysSinceVisit >= 3) {
+        weight += 0.7;
+    }
+
+    return Math.max(0.15, weight);
+};
+
+GameModel.prototype.createDailyCustomerList = function() {
+    const pool = [...CUSTOMERS_DB];
+    const picked = [];
+    const customerCount = 4;
+
+    while (picked.length < customerCount && pool.length > 0) {
+        let totalWeight = 0;
+
+        for (const customer of pool) {
+            totalWeight += this.getCustomerWeight(customer);
+        }
+
+        let roll = Math.random() * totalWeight;
+        let selectedIndex = 0;
+
+        for (let i = 0; i < pool.length; i++) {
+            roll -= this.getCustomerWeight(pool[i]);
+
+            if (roll <= 0) {
+                selectedIndex = i;
+                break;
+            }
+        }
+
+        picked.push(pool[selectedIndex]);
+        pool.splice(selectedIndex, 1);
+    }
+
+    return picked;
+};
+
+GameModel.prototype.beginDay = function() {
+    this.sales = 0;
+    this.satisfaction = 0;
+    this.soldCounts = {};
+
+    this.currentIndex = 0;
+    this.currentCustomer = null;
+    this.options = [];
+    this.secondOptions = [];
+    this.message = "";
+    this.canSecond = false;
+
+    this.night = this.pendingNight || this.pickNightContext();
+    this.pendingNight = null;
+
+    this.customers = this.createDailyCustomerList();
+    this.regulars = this.getRegularCount();
+};
+
+GameModel.prototype.beginNextDay = function() {
+    this.day += 1;
+    this.beginDay();
+    this.nextCustomer();
+};
+
+GameModel.prototype.getArrivalLine = function(customer) {
+    const memory = this.getCustomerMemory(customer.id);
+
+    if (memory.visits >= 2 && memory.trust >= 4) {
+        return "この前の、助かったよ。\n今夜も少しだけ、頼っていいかな。";
+    }
+
+    if (memory.visits >= 2 && memory.trust >= 3) {
+        return "こんばんは。\n今日は、あの屋台に寄ろうと思ってた。";
+    }
+
+    if (memory.visits >= 2 && memory.trust <= -2) {
+        return "今日は、通りがかりだったから。\n一品だけ、もらっていこうかな。";
+    }
+
+    return customer.line;
+};
+
+GameModel.prototype.nextCustomer = function() {
+    if (this.currentIndex >= this.customers.length) {
+        this.finishDay();
+        return;
+    }
+
+    this.currentCustomer = this.customers[this.currentIndex];
+
+    const memory = this.getCustomerMemory(this.currentCustomer.id);
+
+    memory.visits += 1;
+    memory.lastVisitDay = this.day;
+
+    this.message = this.getArrivalLine(this.currentCustomer);
+    this.state = STATE.ARRIVAL;
+    this.animT = 0;
+    this.customerX = GAME_W + 50;
+};
+
+GameModel.prototype.recordSale = function(dish) {
+    this.soldCounts[dish.name] = (this.soldCounts[dish.name] || 0) + 1;
+
+    this.sales += dish.price;
+    this.totalSales += dish.price;
+
+    if (this.currentCustomer) {
+        const memory = this.getCustomerMemory(this.currentCustomer.id);
+
+        memory.lastDish = dish.id;
+        memory.lastServedDay = this.day;
+    }
+};
+
+GameModel.prototype.adjustTrust = function(customer, amount) {
+    const memory = this.getCustomerMemory(customer.id);
+
+    memory.trust = clampValue(memory.trust + amount, -5, 8);
+    this.shopWarmth = clampValue(this.shopWarmth + amount, -12, 20);
+    this.regulars = this.getRegularCount();
+};
+
+GameModel.prototype.resolveFirst = function(idx) {
+    const dish = this.options[idx];
+    const customer = this.currentCustomer;
+
+    if (customer.idealFirst.includes(dish.id)) {
+        this.recordSale(dish);
+        this.satisfaction += 3;
+        this.adjustTrust(customer, 2);
+
+        this.message = customer.successLine;
+        this.state = STATE.FIRST_RESULT;
+        this.canSecond = true;
+    } else if (customer.okayFirst.includes(dish.id)) {
+        this.recordSale(dish);
+        this.satisfaction += 1;
+        this.adjustTrust(customer, 1);
+
+        this.message = customer.okayLine;
+        this.state = STATE.FIRST_RESULT;
+        this.canSecond = true;
+    } else {
+        this.satisfaction -= 1;
+        this.adjustTrust(customer, -2);
+
+        this.message = customer.missLine;
+        this.state = STATE.FIRST_RESULT;
+        this.canSecond = false;
+    }
+};
+
+GameModel.prototype.resolveSecond = function(idx) {
+    const dish = this.secondOptions[idx];
+    const customer = this.currentCustomer;
+
+    this.recordSale(dish);
+
+    if (customer.goodSecond.includes(dish.id)) {
+        this.satisfaction += 2;
+        this.adjustTrust(customer, 1);
+
+        this.message = "お代わり、ありがとうね。";
+    } else if (customer.badSecond.includes(dish.id)) {
+        this.satisfaction -= 2;
+        this.adjustTrust(customer, -2);
+
+        this.message = customer.oversoldLine;
+    } else {
+        this.message = "はいよ、お待ちどうさま。";
+    }
+
+    this.state = STATE.SECOND_RESULT;
+};
+
+GameModel.prototype.buildDayClosingLine = function() {
+    if (this.satisfaction >= 7 && this.regulars >= 2) {
+        return "湯気の向こうで、\n何人かの顔がほどけた。";
+    }
+
+    if (this.satisfaction >= 4) {
+        return "今夜のだしは、\n誰かの帰り道に残った。";
+    }
+
+    if (this.satisfaction <= -2) {
+        return "少しだけ、言葉を急ぎすぎた夜だった。";
+    }
+
+    if (this.sales >= 700) {
+        return "よく売れた夜だった。\nけれど、顔までは見えていただろうか。";
+    }
+
+    return "今夜の横丁は、\n静かに一日を閉じていった。";
+};
+
+GameModel.prototype.finishDay = function() {
+    this.pendingNight = this.pickNightContext();
+
+    this.dayClosingLine = this.buildDayClosingLine();
+    this.tomorrowHint = `明日の気配：${this.pendingNight.label}\n${this.pendingNight.forecast}`;
+
+    this.state = STATE.SUMMARY;
+};
+
+
 function resized() {
   const scaleX = WIDTH / GAME_W;
   const scaleY = HEIGHT / GAME_H;
@@ -351,8 +692,7 @@ function getChoiceCardRect(index, count) {
 function handleTap(x, y) {
     switch (model.state) {
         case STATE.TITLE:
-            model.reset();
-            model.nextCustomer();
+            model.startNewRun();
             lockInput();
             break;
 
@@ -419,13 +759,15 @@ function handleTap(x, y) {
             break;
 
         case STATE.SUMMARY:
-            if (isInside(x, y, 33, 45, 114, 26)) {
-                model.state = STATE.TITLE;
+            if (isInside(x, y, 33, 40, 114, 28)) {
+                model.beginNextDay();
                 lockInput();
             }
             break;
     }
 }
+
+
 
 
 // ==========================================
@@ -790,75 +1132,77 @@ function drawCustomer() {
 }
 
 function drawUI() {
-  rectMode(CORNER);
-  noStroke();
+    rectMode(CORNER);
+    noStroke();
 
-  fill(11, 14, 22, 242);
-  rect(0, 292, GAME_W, 28);
-
-  fill(95, 71, 56);
-  rect(0, 292, GAME_W, 2);
-
-  fill(241, 230, 203);
-  textSize(10);
-  textAlign("left");
-  text("今夜のおでん", 8, 303);
-
-  fill(182, 190, 204);
-  textSize(8);
-  textAlign("center");
-  text(`${model.currentIndex + 1} / ${model.customers.length} 人目`, GAME_W / 2, 303);
-
-  fill(241, 230, 203);
-  textSize(10);
-  textAlign("right");
-  text(`¥ ${model.sales}`, GAME_W - 8, 303);
-
-  textSize(8);
-  fill(151, 160, 177);
-  textAlign("left");
-  text(`満足 ${model.satisfaction} 常連 ${model.regulars}`, 8, 281);
-
-  textAlign("right");
-  text("雨の横丁", GAME_W - 8, 281);
-
-  if (model.message && model.state !== STATE.SUMMARY) {
-    fill(17, 21, 29, 238);
-    rect(9, 132, 162, 41);
+    fill(11, 14, 22, 242);
+    rect(0, 292, GAME_W, 28);
 
     fill(95, 71, 56);
-    rect(9, 132, 162, 3);
+    rect(0, 292, GAME_W, 2);
 
-    let name = model.currentCustomer ? model.currentCustomer.name : "店主";
+    fill(241, 230, 203);
+    textSize(10);
+    textAlign("left");
+    text("今夜のおでん", 8, 303);
 
-    if (model.state === STATE.SECOND_RESULT && model.message.startsWith("まいどあり")) {
-      name = "店主";
-    } else if (model.state === STATE.SECOND_RESULT && model.message.startsWith("はいよ")) {
-      name = "店主";
+    fill(182, 190, 204);
+    textSize(8);
+    textAlign("center");
+    text(`第${model.day}夜　${model.currentIndex + 1} / ${model.customers.length} 人目`, GAME_W / 2, 303);
+
+    fill(241, 230, 203);
+    textSize(10);
+    textAlign("right");
+    text(`¥ ${model.sales}`, GAME_W - 8, 303);
+
+    textSize(8);
+    fill(151, 160, 177);
+    textAlign("left");
+    text(`満足 ${model.satisfaction}　常連 ${model.regulars}`, 8, 281);
+
+    textAlign("right");
+    text(model.night ? model.night.label : "横丁の夜", GAME_W - 8, 281);
+
+    if (model.message && model.state !== STATE.SUMMARY) {
+        fill(17, 21, 29, 238);
+        rect(9, 132, 162, 41);
+
+        fill(95, 71, 56);
+        rect(9, 132, 162, 3);
+
+        let name = model.currentCustomer ? model.currentCustomer.name : "店主";
+
+        if (model.state === STATE.SECOND_RESULT && model.message.startsWith("まいどあり")) {
+            name = "店主";
+        } else if (model.state === STATE.SECOND_RESULT && model.message.startsWith("はいよ")) {
+            name = "店主";
+        }
+
+        fill(239, 218, 185);
+        textSize(9);
+        textAlign("left");
+        text(name, 17, 160);
+
+        fill(211, 214, 219);
+        textSize(9);
+        drawSplitText(model.message, 17, 143, 18, 10);
     }
 
-    fill(239, 218, 185);
-    textSize(9);
-    textAlign("left");
-    text(name, 17, 160);
-
-    fill(211, 214, 219);
-    textSize(9);
-    drawSplitText(model.message, 17, 143, 18, 10);
-  }
-
-  if (model.state === STATE.FIRST_CHOICE) {
-    drawIngredientCards(model.options, 3);
-  } else if (model.state === STATE.FIRST_RESULT) {
-    drawTapToNext();
-  } else if (model.state === STATE.SECOND_DECISION) {
-    drawDecisionButtons();
-  } else if (model.state === STATE.SECOND_CHOICE) {
-    drawIngredientCards(model.secondOptions, 2);
-  } else if (model.state === STATE.SECOND_RESULT) {
-    drawTapToNext();
-  }
+    if (model.state === STATE.FIRST_CHOICE) {
+        drawIngredientCards(model.options, 3);
+    } else if (model.state === STATE.FIRST_RESULT) {
+        drawTapToNext();
+    } else if (model.state === STATE.SECOND_DECISION) {
+        drawDecisionButtons();
+    } else if (model.state === STATE.SECOND_CHOICE) {
+        drawIngredientCards(model.secondOptions, 2);
+    } else if (model.state === STATE.SECOND_RESULT) {
+        drawTapToNext();
+    }
 }
+
+
 
 function drawIngredientCards(options, count) {
   rectMode(CORNER);
@@ -1032,65 +1376,64 @@ function drawTitle() {
 
 
 function drawSummary() {
-  rectMode(CORNER);
-  noStroke();
+    rectMode(CORNER);
+    noStroke();
 
-  fill(7, 10, 16, 204);
-  rect(0, 0, GAME_W, GAME_H);
+    fill(7, 10, 16, 204);
+    rect(0, 0, GAME_W, GAME_H);
 
-  fill(67, 47, 38);
-  rect(13, 27, 154, 260);
+    fill(67, 47, 38);
+    rect(13, 27, 154, 260);
 
-  fill(234, 220, 190);
-  rect(16, 30, 148, 254);
+    fill(234, 220, 190);
+    rect(16, 30, 148, 254);
 
-  fill(246, 237, 214);
-  rect(20, 34, 140, 246);
+    fill(246, 237, 214);
+    rect(20, 34, 140, 246);
 
-  fill(76, 52, 40);
-  textSize(14);
-  textAlign("center");
-  text("今夜のしめ", GAME_W / 2, 255);
+    fill(76, 52, 40);
+    textSize(14);
+    textAlign("center");
+    text(`第${model.day}夜のしめ`, GAME_W / 2, 255);
 
-  textSize(10);
-  textAlign("left");
-  text(`売上: ¥${model.sales}`, 34, 227);
-  text(`満足度: ${model.satisfaction}`, 34, 210);
-  text(`常連になった: ${model.regulars} 人`, 34, 193);
+    fill(127, 82, 57);
+    textSize(8);
+    text(model.night ? model.night.label : "", GAME_W / 2, 239);
 
-  let top = "なし";
-  let maxCount = 0;
+    fill(76, 52, 40);
+    textSize(10);
+    textAlign("left");
+    text(`今夜の売上： ¥${model.sales}`, 34, 218);
+    text(`累計売上： ¥${model.totalSales}`, 34, 201);
+    text(`常連になった人： ${model.regulars}人`, 34, 184);
 
-  for (const [name, count] of Object.entries(model.soldCounts)) {
-    if (count > maxCount) {
-      maxCount = count;
-      top = name;
+    let top = "なし";
+    let maxCount = 0;
+
+    for (const [name, count] of Object.entries(model.soldCounts)) {
+        if (count > maxCount) {
+            maxCount = count;
+            top = name;
+        }
     }
-  }
 
-  text(`一番売れた具: ${top} (${maxCount}回)`, 34, 176);
+    text(`今夜よく出た具： ${top} (${maxCount}回)`, 34, 167);
 
-  let rep = "";
+    fill(127, 82, 57);
+    textSize(10);
+    drawSplitText(model.dayClosingLine, 34, 123, 15, 13);
 
-  if (model.satisfaction >= 5 && model.sales > 800) {
-    rep = "湯気の向こうで、\n何人かの顔がほどけた。";
-  } else if (model.satisfaction >= 5) {
-    rep = "売上は控えめ。\nでも、また来たいと言う人がいた。";
-  } else if (model.sales > 800) {
-    rep = "よく売れた夜だった。\nただ、少し急かしすぎたかもしれない。";
-  } else {
-    rep = "今夜のだしは、\n少しだけ噛み合わなかった。";
-  }
+    fill(103, 74, 57);
+    textSize(8);
+    drawSplitText(model.tomorrowHint, 34, 77, 17, 10);
 
-  fill(127, 82, 57);
-  textSize(10);
-  drawSplitText(rep, 34, 117, 14, 13);
+    fill(116, 61, 43);
+    rect(33, 40, 114, 28);
 
-  fill(116, 61, 43);
-  rect(33, 45, 114, 26);
-
-  fill(255, 241, 214);
-  textAlign("center");
-  textSize(9);
-  text("もう一晩やる", GAME_W / 2, 54);
+    fill(255, 241, 214);
+    textAlign("center");
+    textSize(9);
+    text("明日のれんを出す", GAME_W / 2, 50);
 }
+
+
