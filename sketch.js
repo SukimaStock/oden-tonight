@@ -697,15 +697,20 @@ function handleTap(x, y) {
             break;
 
         case STATE.ARRIVAL:
-            if (model.animT > 0.3) model.animT = 1;
+            if (model.animT > 0.3) {
+                model.animT = 1;
+            }
             break;
 
         case STATE.FIRST_CHOICE:
-            for (let i = 0; i < 3; i++) {
-                const card = getChoiceCardRect(i, 3);
+            for (let i = 0; i < 6; i++) {
+                const slot = getPotSlotRect(i);
 
-                if (isInside(x, y, card.x, card.y, card.w, card.h)) {
-                    model.resolveFirst(i);
+                if (
+                    model.potSlots[i] &&
+                    isInside(x, y, slot.x, slot.y, slot.w, slot.h)
+                ) {
+                    model.resolvePotFirstDish(i);
                     lockInput();
                     break;
                 }
@@ -730,36 +735,6 @@ function handleTap(x, y) {
                 model.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI &&
                 model.activeRelationEvent.phase === "DECISION";
 
-            if (isRelationDecision) {
-                if (
-                    isInside(
-                        x,
-                        y,
-                        buttons.close.x,
-                        buttons.close.y,
-                        buttons.close.w,
-                        buttons.close.h
-                    )
-                ) {
-                    model.resolveRelationEventDecision("CLOSE");
-                    lockInput();
-                } else if (
-                    isInside(
-                        x,
-                        y,
-                        buttons.more.x,
-                        buttons.more.y,
-                        buttons.more.w,
-                        buttons.more.h
-                    )
-                ) {
-                    model.resolveRelationEventDecision("MORE");
-                    lockInput();
-                }
-
-                break;
-            }
-
             if (
                 isInside(
                     x,
@@ -770,10 +745,18 @@ function handleTap(x, y) {
                     buttons.close.h
                 )
             ) {
-                model.message = "まいどあり。気をつけて。";
-                model.state = STATE.SECOND_RESULT;
+                if (isRelationDecision) {
+                    model.resolveRelationEventDecision("CLOSE");
+                } else {
+                    model.message = "まいどあり。気をつけて。";
+                    model.state = STATE.SECOND_RESULT;
+                }
+
                 lockInput();
-            } else if (
+                break;
+            }
+
+            if (
                 isInside(
                     x,
                     y,
@@ -783,7 +766,19 @@ function handleTap(x, y) {
                     buttons.more.h
                 )
             ) {
-                model.createSecondOptions();
+                if (!model.hasPotIngredients()) {
+                    model.message =
+                        "鍋には、もう出せる具が残っていない。";
+
+                    model.state = STATE.SECOND_RESULT;
+                    lockInput();
+                    break;
+                }
+
+                if (isRelationDecision) {
+                    model.activeRelationEvent.phase = "POT_SECOND";
+                }
+
                 model.state = STATE.SECOND_CHOICE;
                 lockInput();
             }
@@ -792,11 +787,14 @@ function handleTap(x, y) {
         }
 
         case STATE.SECOND_CHOICE:
-            for (let i = 0; i < 2; i++) {
-                const card = getChoiceCardRect(i, 2);
+            for (let i = 0; i < 6; i++) {
+                const slot = getPotSlotRect(i);
 
-                if (isInside(x, y, card.x, card.y, card.w, card.h)) {
-                    model.resolveSecond(i);
+                if (
+                    model.potSlots[i] &&
+                    isInside(x, y, slot.x, slot.y, slot.w, slot.h)
+                ) {
+                    model.resolvePotSecondDish(i);
                     lockInput();
                     break;
                 }
@@ -809,7 +807,9 @@ function handleTap(x, y) {
             break;
 
         case STATE.DEPARTURE:
-            if (model.animT > 0.3) model.animT = 1;
+            if (model.animT > 0.3) {
+                model.animT = 1;
+            }
             break;
 
         case STATE.SUMMARY:
@@ -820,6 +820,7 @@ function handleTap(x, y) {
             break;
     }
 }
+
 
 
 
@@ -872,18 +873,35 @@ function updateAnimations() {
         model.activeRelationEvent &&
         model.eventGuest;
 
-    // 二人連れの夜だけ、右側の空いた場所へ二人を並べる
     const targetX = hasRelationPair ? 130 : 140;
 
     if (model.state === STATE.ARRIVAL) {
-        model.customerX = lerp(GAME_W + 40, targetX, easeOut(model.animT));
+        model.customerX = lerp(
+            GAME_W + 40,
+            targetX,
+            easeOut(model.animT)
+        );
 
         if (model.animT === 1) {
             model.createFirstOptions();
-            model.state = STATE.FIRST_CHOICE;
+
+            if (model.hasPotIngredients()) {
+                model.state = STATE.FIRST_CHOICE;
+            } else {
+                model.message =
+                    "鍋の具は、もう残っていなかった。\n" +
+                    "今夜はここで、のれんをしまおう。";
+
+                model.canSecond = false;
+                model.state = STATE.FIRST_RESULT;
+            }
         }
     } else if (model.state === STATE.DEPARTURE) {
-        model.customerX = lerp(targetX, -40, easeIn(model.animT));
+        model.customerX = lerp(
+            targetX,
+            -40,
+            easeIn(model.animT)
+        );
 
         if (model.animT === 1) {
             model.currentIndex++;
@@ -891,6 +909,7 @@ function updateAnimations() {
         }
     }
 }
+
 
 
 function easeOut(t) {
@@ -1222,12 +1241,16 @@ function drawUI() {
     fill(241, 230, 203);
     textSize(10);
     textAlign("left");
-    text("今夜のおでん", 8, 303);
+    text("おでん", 8, 303);
 
     fill(182, 190, 204);
     textSize(8);
     textAlign("center");
-    text(`第${model.day}夜　${model.currentIndex + 1} / ${model.customers.length} 人目`, GAME_W / 2, 303);
+    text(
+        `第${model.day}夜　${model.currentIndex + 1}/${model.customers.length}`,
+        GAME_W / 2,
+        303
+    );
 
     fill(241, 230, 203);
     textSize(10);
@@ -1249,11 +1272,19 @@ function drawUI() {
         fill(95, 71, 56);
         rect(9, 132, 162, 3);
 
-        let name = model.currentCustomer ? model.currentCustomer.name : "店主";
+        let name = model.currentCustomer
+            ? model.currentCustomer.name
+            : "店主";
 
-        if (model.state === STATE.SECOND_RESULT && model.message.startsWith("まいどあり")) {
+        if (
+            model.state === STATE.SECOND_RESULT &&
+            model.message.startsWith("まいどあり")
+        ) {
             name = "店主";
-        } else if (model.state === STATE.SECOND_RESULT && model.message.startsWith("はいよ")) {
+        } else if (
+            model.state === STATE.SECOND_RESULT &&
+            model.message.startsWith("はいよ")
+        ) {
             name = "店主";
         }
 
@@ -1268,17 +1299,22 @@ function drawUI() {
     }
 
     if (model.state === STATE.FIRST_CHOICE) {
-        drawIngredientCards(model.options, 3);
-    } else if (model.state === STATE.FIRST_RESULT) {
-        drawTapToNext();
-    } else if (model.state === STATE.SECOND_DECISION) {
-        drawDecisionButtons();
+        drawPotHand(false);
     } else if (model.state === STATE.SECOND_CHOICE) {
-        drawIngredientCards(model.secondOptions, 2);
-    } else if (model.state === STATE.SECOND_RESULT) {
-        drawTapToNext();
+        drawPotHand(true);
+    } else {
+        drawServedTray();
+
+        if (model.state === STATE.FIRST_RESULT) {
+            drawTapToNext();
+        } else if (model.state === STATE.SECOND_DECISION) {
+            drawDecisionButtons();
+        } else if (model.state === STATE.SECOND_RESULT) {
+            drawTapToNext();
+        }
     }
 }
+
 
 
 
@@ -1339,38 +1375,7 @@ function drawDecisionButtons() {
         model.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI &&
         model.activeRelationEvent.phase === "DECISION";
 
-    if (isRelationDecision) {
-        fill(72, 51, 39);
-        rect(close.x, close.y, close.w, close.h);
-
-        fill(229, 216, 188);
-        rect(close.x + 3, close.y + 3, close.w - 6, close.h - 6);
-
-        fill(76, 51, 40);
-        textSize(11);
-        textAlign("center");
-        text("ここで会計にする", GAME_W / 2, textYFromTop(238));
-
-        fill(118, 91, 71);
-        textSize(7);
-        text("湯冷めしないうちに、宿へ戻す", GAME_W / 2, textYFromTop(249));
-
-        fill(111, 61, 43);
-        rect(more.x, more.y, more.w, more.h);
-
-        fill(206, 130, 77);
-        rect(more.x + 3, more.y + 3, more.w - 6, more.h - 6);
-
-        fill(255, 243, 217);
-        textSize(10);
-        text("もう一皿すすめる　+¥160", GAME_W / 2, textYFromTop(289));
-
-        fill(255, 231, 194);
-        textSize(7);
-        text("話は続く。でも、少し遅くなる", GAME_W / 2, textYFromTop(300));
-
-        return;
-    }
+    const potReady = model.hasPotIngredients();
 
     fill(72, 51, 39);
     rect(close.x, close.y, close.w, close.h);
@@ -1381,26 +1386,77 @@ function drawDecisionButtons() {
     fill(76, 51, 40);
     textSize(11);
     textAlign("center");
-    text("今日はここまで", GAME_W / 2, textYFromTop(238));
 
-    fill(118, 91, 71);
-    textSize(7);
-    text("会計にして、送り出す", GAME_W / 2, textYFromTop(249));
+    if (isRelationDecision) {
+        text("ここで会計にする", GAME_W / 2, textYFromTop(238));
 
-    fill(111, 61, 43);
-    rect(more.x, more.y, more.w, more.h);
+        fill(118, 91, 71);
+        textSize(7);
+        text(
+            "湯冷めしないうちに、宿へ戻す",
+            GAME_W / 2,
+            textYFromTop(249)
+        );
+    } else {
+        text("今日はここまで", GAME_W / 2, textYFromTop(238));
 
-    fill(206, 130, 77);
-    rect(more.x + 3, more.y + 3, more.w - 6, more.h - 6);
+        fill(118, 91, 71);
+        textSize(7);
+        text(
+            "今の一皿を、ここで確定する",
+            GAME_W / 2,
+            textYFromTop(249)
+        );
+    }
 
-    fill(255, 243, 217);
-    textSize(11);
-    text("もう一品すすめる", GAME_W / 2, textYFromTop(289));
+    if (potReady) {
+        fill(111, 61, 43);
+        rect(more.x, more.y, more.w, more.h);
 
-    fill(255, 231, 194);
-    textSize(7);
-    text("今夜なら、もう少しいける？", GAME_W / 2, textYFromTop(300));
+        fill(206, 130, 77);
+        rect(more.x + 3, more.y + 3, more.w - 6, more.h - 6);
+
+        fill(255, 243, 217);
+        textSize(10);
+        text("鍋からもう一皿取る", GAME_W / 2, textYFromTop(289));
+
+        fill(255, 231, 194);
+        textSize(7);
+
+        if (isRelationDecision) {
+            text(
+                "売上は増える。二人の夜は少し長くなる",
+                GAME_W / 2,
+                textYFromTop(300)
+            );
+        } else {
+            text(
+                "残りの具から、もう一つ出す",
+                GAME_W / 2,
+                textYFromTop(300)
+            );
+        }
+    } else {
+        fill(67, 60, 52);
+        rect(more.x, more.y, more.w, more.h);
+
+        fill(93, 82, 67);
+        rect(more.x + 3, more.y + 3, more.w - 6, more.h - 6);
+
+        fill(214, 196, 163);
+        textSize(10);
+        text("鍋に残りがない", GAME_W / 2, textYFromTop(289));
+
+        fill(180, 161, 130);
+        textSize(7);
+        text(
+            "今夜は、この一皿で会計にする",
+            GAME_W / 2,
+            textYFromTop(300)
+        );
+    }
 }
+
 
 
 
@@ -1550,6 +1606,454 @@ function drawSummary() {
     textSize(9);
     text("明日のれんを出す", GAME_W / 2, 50);
 }
+
+const previousBeginDayForPot = GameModel.prototype.beginDay;
+const previousNextCustomerForPot = GameModel.prototype.nextCustomer;
+
+function getPotSlotRect(index) {
+    const col = index % 2;
+    const row = Math.floor(index / 2);
+
+    return {
+        x: 10 + col * 82,
+        y: 78 - row * 32,
+        w: 78,
+        h: 29
+    };
+}
+
+function getPotDishArt(item) {
+    if (!item) return null;
+    return ART[item.visual];
+}
+
+GameModel.prototype.buildPotForDay = function() {
+    const shuffled = [...INGREDIENTS].sort(() => Math.random() - 0.5);
+
+    this.potSlots = shuffled.slice(0, 6);
+
+    if (
+        this.relationEventToday &&
+        this.relationEventToday.id === RELATION_EVENT_IDS.NOMURA_YUKI
+    ) {
+        this.ensurePotContains([
+            "GANMODOKI",
+            "DAIKON",
+            "BEEF_TENDON"
+        ]);
+    }
+};
+
+GameModel.prototype.ensurePotContains = function(requiredIds) {
+    if (!this.potSlots) {
+        this.potSlots = [];
+    }
+
+    for (const ingredientId of requiredIds) {
+        const alreadyExists = this.potSlots.some(item => {
+            return item && item.id === ingredientId;
+        });
+
+        if (alreadyExists) continue;
+
+        const requiredNow = requiredIds.filter(id => {
+            return this.potSlots.some(item => item && item.id === id);
+        });
+
+        let replaceIndex = this.potSlots.findIndex(item => {
+            return item && !requiredNow.includes(item.id);
+        });
+
+        if (replaceIndex === -1) {
+            replaceIndex = this.potSlots.findIndex(item => item !== null);
+        }
+
+        const replacement = findIngredientById(ingredientId);
+
+        if (replaceIndex >= 0 && replacement) {
+            this.potSlots[replaceIndex] = replacement;
+        }
+    }
+};
+
+GameModel.prototype.hasPotIngredients = function() {
+    if (!this.potSlots) return false;
+
+    return this.potSlots.some(item => item !== null);
+};
+
+GameModel.prototype.getCurrentServedDishes = function() {
+    if (
+        this.servedForDay !== this.day ||
+        this.servedForIndex !== this.currentIndex
+    ) {
+        return [];
+    }
+
+    return this.currentServedDishes || [];
+};
+
+GameModel.prototype.resetCurrentServing = function() {
+    this.currentServedDishes = [];
+    this.servedForDay = this.day;
+    this.servedForIndex = this.currentIndex;
+};
+
+GameModel.prototype.takePotIngredient = function(slotIndex) {
+    if (!this.potSlots) return null;
+
+    const dish = this.potSlots[slotIndex];
+
+    if (!dish) return null;
+
+    this.potSlots[slotIndex] = null;
+
+    if (
+        this.servedForDay !== this.day ||
+        this.servedForIndex !== this.currentIndex
+    ) {
+        this.resetCurrentServing();
+    }
+
+    this.currentServedDishes.push(dish);
+
+    return dish;
+};
+
+GameModel.prototype.beginDay = function() {
+    previousBeginDayForPot.call(this);
+    this.buildPotForDay();
+};
+
+GameModel.prototype.nextCustomer = function() {
+    previousNextCustomerForPot.call(this);
+
+    if (this.state !== STATE.ARRIVAL || !this.currentCustomer) return;
+
+    this.resetCurrentServing();
+
+    if (
+        this.activeRelationEvent &&
+        this.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI
+    ) {
+        this.ensurePotContains([
+            "GANMODOKI",
+            "DAIKON",
+            "BEEF_TENDON"
+        ]);
+    }
+};
+
+GameModel.prototype.resolveFirstFromPot = function(dish) {
+    const customer = this.currentCustomer;
+
+    if (customer.idealFirst.includes(dish.id)) {
+        this.recordSale(dish);
+        this.satisfaction += 3;
+        this.adjustTrust(customer, 2);
+
+        this.message = customer.successLine;
+        this.state = STATE.FIRST_RESULT;
+        this.canSecond = true;
+        return;
+    }
+
+    if (customer.badFirst.includes(dish.id)) {
+        this.satisfaction -= 1;
+        this.adjustTrust(customer, -2);
+
+        this.message = customer.missLine;
+        this.state = STATE.FIRST_RESULT;
+        this.canSecond = false;
+        return;
+    }
+
+    this.recordSale(dish);
+    this.satisfaction += 1;
+    this.adjustTrust(customer, 1);
+
+    this.message = customer.okayLine;
+    this.state = STATE.FIRST_RESULT;
+    this.canSecond = true;
+};
+
+GameModel.prototype.resolveSecondFromPot = function(dish) {
+    const customer = this.currentCustomer;
+
+    this.recordSale(dish);
+
+    if (customer.goodSecond.includes(dish.id)) {
+        this.satisfaction += 2;
+        this.adjustTrust(customer, 1);
+
+        this.message = "お代わり、ありがとうね。";
+    } else if (customer.badSecond.includes(dish.id)) {
+        this.satisfaction -= 2;
+        this.adjustTrust(customer, -2);
+
+        this.message = customer.oversoldLine;
+    } else {
+        this.message = "はいよ、お待ちどうさま。";
+    }
+
+    this.state = STATE.SECOND_RESULT;
+};
+
+GameModel.prototype.resolveRelationEventFirstFromPot = function(dish) {
+    const event = this.activeRelationEvent;
+
+    if (!event) return;
+
+    event.firstDishId = dish.id;
+
+    this.recordSale(dish);
+
+    const warmDishIds = ["GANMODOKI", "DAIKON"];
+    const heavyDishIds = ["BEEF_TENDON", "MOCHI_POUCH"];
+
+    if (warmDishIds.includes(dish.id)) {
+        this.satisfaction += 3;
+        this.adjustShopFlow("onsen", 2);
+
+        event.phase = "DECISION";
+        this.canSecond = true;
+
+        this.message =
+            "野々村さんが笑った。\n" +
+            "「これなら、宿に戻る前にちょうどいいね」";
+    } else if (heavyDishIds.includes(dish.id)) {
+        this.satisfaction -= 1;
+        this.adjustShopFlow("onsen", -1);
+
+        event.phase = "RESOLVED";
+        this.canSecond = false;
+
+        this.storyFlags.nomuraYukiOutcome = "HEAVY";
+        this.eventLog =
+            "湯上がりの二人は、少し早く席を立った。";
+
+        this.message =
+            "ユキさんが、小さく笑った。\n" +
+            "「おいしそう。でも、湯上がりには少し重いかも」";
+    } else {
+        this.satisfaction += 1;
+        this.adjustShopFlow("onsen", 1);
+
+        event.phase = "DECISION";
+        this.canSecond = true;
+
+        this.message =
+            "ユキさんが、湯気を見つめている。\n" +
+            "「町の夜って、こういう感じなんですね」";
+    }
+
+    this.state = STATE.FIRST_RESULT;
+};
+
+GameModel.prototype.resolveRelationEventSecondFromPot = function(dish) {
+    const event = this.activeRelationEvent;
+
+    if (!event) return;
+
+    this.recordSale(dish);
+
+    const gentleDishIds = [
+        "DAIKON",
+        "GANMODOKI",
+        "EGG",
+        "CHIKUWA"
+    ];
+
+    const heavyDishIds = [
+        "BEEF_TENDON",
+        "MOCHI_POUCH"
+    ];
+
+    event.finalChoice = dish.id;
+    event.phase = "RESOLVED";
+
+    if (gentleDishIds.includes(dish.id)) {
+        this.satisfaction += 1;
+        this.adjustShopFlow("onsen", 1);
+
+        this.storyFlags.nomuraYukiOutcome = "WARM";
+        this.eventLog =
+            "湯上がりの灯が、少し増えた。";
+
+        this.message =
+            "もう一皿は、二人でゆっくり分けられた。\n" +
+            "宿へ戻る道にも、まだ湯気が残っている。";
+    } else if (heavyDishIds.includes(dish.id)) {
+        this.satisfaction -= 2;
+        this.adjustShopFlow("onsen", -2);
+
+        this.storyFlags.nomuraYukiOutcome = "LATE";
+        this.eventLog =
+            "売上は増えたが、湯上がりの灯は少し揺れた。";
+
+        this.message =
+            "皿はきれいに空になった。\n" +
+            "ただ、宿へ戻る足取りは少しだけ急いでいた。";
+    } else {
+        this.satisfaction += 0;
+        this.adjustShopFlow("onsen", 0);
+
+        this.storyFlags.nomuraYukiOutcome = "QUIET";
+        this.eventLog =
+            "二人の会話は、提灯の下で少しだけ続いた。";
+
+        this.message =
+            "野々村さんが湯気の向こうでうなずいた。\n" +
+            "ユキさんは、店の名前を小さく読んでいた。";
+    }
+
+    this.state = STATE.SECOND_RESULT;
+};
+
+GameModel.prototype.resolvePotFirstDish = function(slotIndex) {
+    const dish = this.takePotIngredient(slotIndex);
+
+    if (!dish) return;
+
+    if (
+        this.activeRelationEvent &&
+        this.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI
+    ) {
+        this.resolveRelationEventFirstFromPot(dish);
+        return;
+    }
+
+    this.resolveFirstFromPot(dish);
+};
+
+GameModel.prototype.resolvePotSecondDish = function(slotIndex) {
+    const dish = this.takePotIngredient(slotIndex);
+
+    if (!dish) return;
+
+    if (
+        this.activeRelationEvent &&
+        this.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI &&
+        this.activeRelationEvent.phase === "POT_SECOND"
+    ) {
+        this.resolveRelationEventSecondFromPot(dish);
+        return;
+    }
+
+    this.resolveSecondFromPot(dish);
+};
+
+function drawPotHand(isSecondDish) {
+    rectMode(CORNER);
+    noStroke();
+
+    fill(54, 58, 62);
+    rect(7, 5, 166, 122);
+
+    fill(102, 106, 108);
+    rect(10, 8, 160, 116);
+
+    fill(53, 49, 43);
+    rect(13, 11, 154, 110);
+
+    fill(199, 142, 66);
+    rect(16, 14, 148, 95);
+
+    fill(238, 188, 101, 22);
+    rect(16, 14, 148, 95);
+
+    fill(245, 231, 202);
+    textSize(9);
+    textAlign("left");
+    text("鍋の中", 17, 113);
+
+    fill(231, 213, 175);
+    textSize(7);
+    textAlign("right");
+    text(
+        isSecondDish ? "もう一皿を取る" : "一皿目を取る",
+        163,
+        114
+    );
+
+    for (let i = 0; i < 6; i++) {
+        const slot = getPotSlotRect(i);
+        const item = model.potSlots ? model.potSlots[i] : null;
+
+        fill(72, 67, 59);
+        rect(slot.x - 1, slot.y - 1, slot.w + 2, slot.h + 2);
+
+        if (!item) {
+            fill(93, 77, 56);
+            rect(slot.x, slot.y, slot.w, slot.h);
+
+            fill(229, 200, 143, 95);
+            textSize(7);
+            textAlign("center");
+            text("売切", slot.x + slot.w / 2, slot.y + 11);
+            continue;
+        }
+
+        fill(214, 157, 75);
+        rect(slot.x, slot.y, slot.w, slot.h);
+
+        fill(255, 220, 149, 32);
+        rect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4);
+
+        drawPixelArt(
+            slot.x + 7,
+            slot.y + 7,
+            getPotDishArt(item),
+            2
+        );
+
+        fill(73, 49, 36);
+        textSize(8);
+        textAlign("left");
+        text(item.name, slot.x + 28, slot.y + 15);
+
+        fill(126, 63, 45);
+        textSize(7);
+        textAlign("right");
+        text(`¥${item.price}`, slot.x + slot.w - 5, slot.y + 5);
+    }
+}
+
+function drawServedTray() {
+    const dishes = model.getCurrentServedDishes();
+
+    if (!dishes || dishes.length === 0) return;
+
+    rectMode(CORNER);
+    noStroke();
+
+    fill(32, 35, 42, 240);
+    rect(10, 105, 160, 22);
+
+    fill(95, 71, 56);
+    rect(10, 105, 160, 2);
+
+    fill(235, 216, 181);
+    textSize(7);
+    textAlign("left");
+    text("小皿", 17, 113);
+
+    for (let i = 0; i < dishes.length; i++) {
+        const dish = dishes[i];
+        const x = 48 + i * 56;
+
+        fill(224, 212, 185);
+        rect(x, 108, 48, 13);
+
+        drawPixelArt(x + 4, 110, ART[dish.visual], 1);
+
+        fill(71, 49, 37);
+        textSize(7);
+        textAlign("left");
+        text(dish.name, x + 17, 112);
+    }
+}
+
 
 const RELATION_EVENT_IDS = {
     NOMURA_YUKI: "NOMURA_YUKI"
