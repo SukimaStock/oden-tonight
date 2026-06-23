@@ -1,791 +1,569 @@
 // ==========================================
-// Constants & Game Data
+// 今夜のおでん — 手札式おでんブラックジャック
+// Complete rewrite: no patch layers / no prototype overrides
 // ==========================================
+
 const GAME_W = 180;
 const GAME_H = 320;
 
 const STATE = {
   TITLE: "TITLE",
   ARRIVAL: "ARRIVAL",
-  FIRST_CHOICE: "FIRST_CHOICE",
-  FIRST_RESULT: "FIRST_RESULT",
-  SECOND_DECISION: "SECOND_DECISION",
-  SECOND_CHOICE: "SECOND_CHOICE",
-  SECOND_RESULT: "SECOND_RESULT",
+  SERVE: "SERVE",
+  RESULT: "RESULT",
   DEPARTURE: "DEPARTURE",
   SUMMARY: "SUMMARY"
 };
 
+const BJ_TARGET = 21;
+const HAND_SIZE = 3;
+const DAILY_CUSTOMERS = 4;
+const DAILY_POT_TARGET = 18;
+
 const INGREDIENTS = [
-  { id: "DAIKON", name: "だいこん", price: 120, shortDesc: "しみる、やさしい", visual: "daikon" },
-  { id: "EGG", name: "たまご", price: 130, shortDesc: "少し元気が出る", visual: "egg" },
-  { id: "BEEF_TENDON", name: "牛すじ", price: 220, shortDesc: "濃くて満たされる", visual: "beef" },
-  { id: "KONNYAKU", name: "こんにゃく", price: 100, shortDesc: "軽く、気楽に", visual: "konnyaku" },
-  { id: "GANMODOKI", name: "がんも", price: 150, shortDesc: "だしを楽しむ", visual: "ganmo" },
-  { id: "MOCHI_POUCH", name: "餅巾着", price: 190, shortDesc: "今日はちょっと特別", visual: "mochi" },
-  { id: "CHIKUWA", name: "ちくわ", price: 110, shortDesc: "気軽な小腹みたし", visual: "chikuwa" },
-  { id: "SHIRATAKI", name: "しらたき", price: 90, shortDesc: "控えめ、軽やか", visual: "shirataki" }
+  { id: "SHIRATAKI", name: "しらたき", value: 2, price: 90,  family: "LIGHT", visual: "shirataki" },
+  { id: "KONNYAKU",  name: "こんにゃく", value: 3, price: 100, family: "LIGHT", visual: "konnyaku" },
+  { id: "CHIKUWA",   name: "ちくわ", value: 4, price: 110, family: "LIGHT", visual: "chikuwa" },
+  { id: "EGG",       name: "たまご", value: 5, price: 130, family: "WARM",  visual: "egg" },
+  { id: "DAIKON",    name: "だいこん", value: 6, price: 120, family: "WARM",  visual: "daikon" },
+  { id: "GANMODOKI", name: "がんも", value: 7, price: 150, family: "WARM",  visual: "ganmo" },
+  { id: "MOCHI_POUCH", name: "餅巾着", value: 9, price: 190, family: "FEAST", visual: "mochi" },
+  { id: "BEEF_TENDON", name: "牛すじ", value: 10, price: 220, family: "FEAST", visual: "beef" }
 ];
 
-const CUSTOMERS_DB = [
+const CUSTOMER_DB = [
   {
-    id: "SAEKI", name: "佐伯さん", visual: "office_worker",
+    id: "SAEKI",
+    name: "佐伯さん",
+    visual: "office_worker",
     line: "終電まで、あと七分なんだ。\n冷えただけだから、すぐ食べられるものを",
-    idealFirst: ["DAIKON", "KONNYAKU", "SHIRATAKI"],
-    okayFirst: ["EGG", "CHIKUWA"],
-    badFirst: ["BEEF_TENDON", "MOCHI_POUCH"],
-    goodSecond: ["EGG", "CHIKUWA"],
-    badSecond: ["MOCHI_POUCH", "BEEF_TENDON"],
-    successLine: "これ、ちょうどよかった。",
-    okayLine: "うん、これなら間に合いそう。",
-    missLine: "おいしそうだけど......今日は急いでいて。",
-    oversoldLine: "今日は、これくらいでよかったかも。"
+    exact: "これで、ちょうど走れる。",
+    high: "うん、これなら間に合いそう。",
+    okay: "あったまった。助かったよ。",
+    low: "おいしかったけど、もう少しいけたかな。",
+    bust: "おいしいけど......今日は急いでいて。"
   },
   {
-    id: "MINATO", name: "ミナトさん", visual: "regular_worker",
+    id: "MINATO",
+    name: "ミナトさん",
+    visual: "regular_worker",
     line: "今日は軽くでいいよ。\n財布が、ちょっと冬みたいでさ",
-    idealFirst: ["KONNYAKU", "CHIKUWA", "SHIRATAKI"],
-    okayFirst: ["DAIKON", "EGG"],
-    badFirst: ["BEEF_TENDON", "MOCHI_POUCH"],
-    goodSecond: ["DAIKON", "CHIKUWA"],
-    badSecond: ["BEEF_TENDON", "MOCHI_POUCH"],
-    successLine: "助かる。今日はこういうのでいいんだ。",
-    okayLine: "悪くないね。あったまる。",
-    missLine: "今日は、ちょっと贅沢すぎるかな。",
-    oversoldLine: "あはは......今日は財布が追いつかないよ。"
+    exact: "助かる。今日はこういうのがいいんだ。",
+    high: "悪くないね。あったまる。",
+    okay: "ちょうど小腹が落ち着いたよ。",
+    low: "もう一つ、いけたかもな。",
+    bust: "あはは......今日は財布も胃も追いつかないよ。"
   },
   {
-    id: "TOYAMA", name: "遠山さん", visual: "happy_worker",
+    id: "TOYAMA",
+    name: "遠山さん",
+    visual: "happy_worker",
     line: "今日、少しだけいいことがあってね。\n帰る前に、ひとつ景気づけを",
-    idealFirst: ["BEEF_TENDON", "EGG", "MOCHI_POUCH"],
-    okayFirst: ["DAIKON", "GANMODOKI"],
-    badFirst: ["SHIRATAKI", "KONNYAKU"],
-    goodSecond: ["BEEF_TENDON", "MOCHI_POUCH", "EGG"],
-    badSecond: ["SHIRATAKI", "KONNYAKU"],
-    successLine: "いいね。今日はこれくらい、許される。",
-    okayLine: "なんだか、少し落ち着いたよ。",
-    missLine: "今日はもう少し、景気よくいきたかったな。",
-    oversoldLine: "いや、これはちょっと食べすぎたかも。"
+    exact: "いいね。今日はこれくらい、許される。",
+    high: "なんだか、少し落ち着いたよ。",
+    okay: "悪くない。でも、まだ夜は長いな。",
+    low: "今日はもう少し、景気よくいきたかったな。",
+    bust: "いや、これはちょっと食べすぎたかも。"
   },
   {
-    id: "NONOMURA", name: "野々村さん", visual: "inn_worker",
+    id: "NONOMURA",
+    name: "野々村さん",
+    visual: "inn_worker",
     line: "宴会が長くてね。\n胃に怒られないやつ、ある?",
-    idealFirst: ["DAIKON", "GANMODOKI", "SHIRATAKI"],
-    okayFirst: ["KONNYAKU", "CHIKUWA"],
-    badFirst: ["BEEF_TENDON", "MOCHI_POUCH"],
-    goodSecond: ["DAIKON", "SHIRATAKI"],
-    badSecond: ["BEEF_TENDON", "MOCHI_POUCH", "EGG"],
-    successLine: "これなら、胃も文句を言わない。",
-    okayLine: "うん、今日はこれくらいがいい。",
-    missLine: "おいしそうなんだけどね。今夜は勘弁しておこう。",
-    oversoldLine: "店主さん、今日はもう許して。"
+    exact: "これなら、胃も文句を言わない。",
+    high: "うん、今日はこれくらいがいい。",
+    okay: "だしが、ちゃんとしみるね。",
+    low: "少し物足りないけど、今夜は我慢かな。",
+    bust: "店主さん、今日はもう許して。"
   },
   {
-    id: "YUKI", name: "ユキさん", visual: "tourist",
+    id: "YUKI",
+    name: "ユキさん",
+    visual: "tourist",
     line: "温泉、すごくよかったです。\nこの町らしいものを食べたくて",
-    idealFirst: ["DAIKON", "GANMODOKI", "MOCHI_POUCH"],
-    okayFirst: ["EGG", "BEEF_TENDON"],
-    badFirst: ["SHIRATAKI"],
-    goodSecond: ["MOCHI_POUCH", "EGG"],
-    badSecond: ["SHIRATAKI", "KONNYAKU"],
-    successLine: "ああ、これを食べに来た感じがします。",
-    okayLine: "おいしいです。あったまりますね。",
-    missLine: "悪くないけど、もう少し町らしいものがよかったかも。",
-    oversoldLine: "おいしいけれど、ちょっと多かったですね。"
+    exact: "ああ、これを食べに来た感じがします。",
+    high: "おいしいです。あったまりますね。",
+    okay: "この町の夜って、いいですね。",
+    low: "もう少し食べてみたかったです。",
+    bust: "おいしいけれど、ちょっと多かったですね。"
   },
   {
-    id: "KOTA", name: "コウタ", visual: "student",
+    id: "KOTA",
+    name: "コウタ",
+    visual: "student",
     line: "雨、全然やまないなあ。\n小腹だけ、なんとかしたいです",
-    idealFirst: ["CHIKUWA", "EGG", "KONNYAKU"],
-    okayFirst: ["DAIKON", "GANMODOKI"],
-    badFirst: ["BEEF_TENDON", "MOCHI_POUCH"],
-    goodSecond: ["CHIKUWA", "EGG"],
-    badSecond: ["BEEF_TENDON", "MOCHI_POUCH"],
-    successLine: "これ、ちょうどいいです。",
-    okayLine: "あったまります。助かる。",
-    missLine: "うーん、今日はもっと軽いのでよかったかも。",
-    oversoldLine: "えっ、そんなに食べられないですって。"
+    exact: "これ、ちょうどいいです。",
+    high: "あったまります。助かる。",
+    okay: "小腹は、なんとか落ち着きました。",
+    low: "もう一つ、いけたかもです。",
+    bust: "えっ、そんなに食べられないですって。"
   }
 ];
 
-// ==========================================
-// Pixel Art Data
-// ==========================================
+const NIGHT_CONTEXTS = [
+  { id: "RAIN",  label: "雨の夜",     intro: "雨音が、屋台の屋根を細く叩いている。" },
+  { id: "COLD",  label: "冷える夜",   intro: "吐く息が白く、だしの湯気が濃い。" },
+  { id: "BUSY",  label: "にぎやかな夜", intro: "温泉帰りの人影が、通りを流れている。" },
+  { id: "QUIET", label: "静かな夜",   intro: "提灯だけが、ゆっくり揺れている。" }
+];
+
 const PALETTE = {
   " ": null,
   "W": { r: 240, g: 240, b: 240 }, "w": { r: 200, g: 200, b: 200 },
-  "Y": { r: 240, g: 200, b: 80 }, "y": { r: 200, g: 160, b: 60 },
-  "B": { r: 140, g: 80, b: 50 }, "b": { r: 100, g: 50, b: 30 },
+  "Y": { r: 240, g: 200, b: 80 },  "y": { r: 200, g: 160, b: 60 },
+  "B": { r: 140, g: 80, b: 50 },   "b": { r: 100, g: 50, b: 30 },
   "G": { r: 120, g: 130, b: 130 }, "g": { r: 90, g: 100, b: 100 },
-  "O": { r: 220, g: 150, b: 80 }, "o": { r: 180, g: 110, b: 50 },
+  "O": { r: 220, g: 150, b: 80 },  "o": { r: 180, g: 110, b: 50 },
   "L": { r: 250, g: 230, b: 180 }, "l": { r: 220, g: 190, b: 140 },
   "C": { r: 230, g: 180, b: 100 }, "c": { r: 120, g: 70, b: 40 },
-  "S": { r: 200, g: 220, b: 220 }, "s": { r: 160, g: 180, b: 180 },
-  "P": { r: 240, g: 120, b: 120 }, "p": { r: 200, g: 80, b: 80 },
-  "D": { r: 40, g: 40, b: 50 }, "d": { r: 20, g: 20, b: 30 },
-  "T": { r: 120, g: 90, b: 60 }, "R": { r: 200, g: 60, b: 60 }
+  "S": { r: 200, g: 220, b: 220 }, "s": { r: 160, g: 180, b: 180 }
 };
 
 const ART = {
-  daikon: [" WWWW ", "WWWWWW", "WWWWWW", " wwww ", " wwww ", "  ww  "],
-  egg: ["  YY  ", " YYYY ", "YYYYYY", "yyyyyy", " yyyy ", "  yy  "],
-  beef: ["  b   ", " bBb  ", " bBbb ", "bbBBbb", "  b   ", "  b   "],
-  konnyaku: ["  GG  ", " GGGG ", "GGGGGG", "gggggg", " gggg ", "  gg  "],
-  ganmo: [" OOOO ", "OOOOOO", "oOOOOo", "oooooo", " oooo ", "  oo  "],
-  mochi: ["  ll  ", " LLLL ", "LLLLLL", "llllll", " llll ", "  ll  "],
-  chikuwa: [" CCcc ", "CCCCCC", "CCCCCC", "cccccc", " cccc ", "  cc  "],
+  daikon:    [" WWWW ", "WWWWWW", "WWWWWW", " wwww ", " wwww ", "  ww  "],
+  egg:       ["  YY  ", " YYYY ", "YYYYYY", "yyyyyy", " yyyy ", "  yy  "],
+  beef:      ["  b   ", " bBb  ", " bBbb ", "bbBBbb", "  b   ", "  b   "],
+  konnyaku:  ["  GG  ", " GGGG ", "GGGGGG", "gggggg", " gggg ", "  gg  "],
+  ganmo:     [" OOOO ", "OOOOOO", "oOOOOo", "oooooo", " oooo ", "  oo  "],
+  mochi:     ["  ll  ", " LLLL ", "LLLLLL", "llllll", " llll ", "  ll  "],
+  chikuwa:   [" CCcc ", "CCCCCC", "CCCCCC", "cccccc", " cccc ", "  cc  "],
   shirataki: ["  SS  ", " SSSS ", "sSSsSS", "ssssss", " ssss ", "  ss  "]
 };
 
-// ==========================================
-// Globals
-// ==========================================
 let scaleFactor = 1;
 let offsetX = 0;
 let offsetY = 0;
-let inputLockTimer = 0;
+let inputLockUntil = 0;
+let model = null;
 
+// ==========================================
+// Model
+// ==========================================
 class GameModel {
   constructor() {
-    this.reset();
+    this.resetGame();
   }
 
-  reset() {
+  resetGame() {
     this.state = STATE.TITLE;
+    this.day = 1;
+    this.totalSales = 0;
+    this.totalExact = 0;
+    this.shopMood = 0;
+
     this.sales = 0;
+    this.dailyExact = 0;
     this.satisfaction = 0;
-    this.regulars = 0;
     this.soldCounts = {};
 
-    this.customers = [...CUSTOMERS_DB].sort(() => Math.random() - 0.5);
-    this.currentIndex = 0;
+    this.night = null;
+    this.lastNightId = "";
 
+    this.customers = [];
+    this.currentIndex = 0;
     this.currentCustomer = null;
-    this.options = [];
-    this.secondOptions = [];
     this.message = "";
 
+    this.potDeck = [];
+    this.hand = [null, null, null];
+    this.served = [];
+    this.total = 0;
+
     this.animT = 0;
-    this.customerX = GAME_W + 50;
-    this.canSecond = false;
+    this.customerX = GAME_W + 40;
+
+    this.dayClosingLine = "";
+    this.tomorrowHint = "";
+  }
+
+  startNewRun() {
+    this.resetGame();
+    this.startDay();
+    this.nextCustomer();
+  }
+
+  startNextDay() {
+    this.day += 1;
+    this.startDay();
+    this.nextCustomer();
+  }
+
+  startDay() {
+    this.sales = 0;
+    this.dailyExact = 0;
+    this.satisfaction = 0;
+    this.soldCounts = {};
+    this.currentIndex = 0;
+    this.currentCustomer = null;
+    this.message = "";
+    this.served = [];
+    this.total = 0;
+
+    this.returnHandToPot();
+    this.restockPot();
+    this.refillHand();
+
+    this.night = this.pickNight();
+    this.customers = shuffleCopy(CUSTOMER_DB).slice(0, DAILY_CUSTOMERS);
+  }
+
+  pickNight() {
+    let candidates = NIGHT_CONTEXTS.filter(night => night.id !== this.lastNightId);
+
+    if (candidates.length === 0) {
+      candidates = NIGHT_CONTEXTS;
+    }
+
+    const night = candidates[Math.floor(Math.random() * candidates.length)];
+    this.lastNightId = night.id;
+    return night;
+  }
+
+  returnHandToPot() {
+    for (const dish of this.hand || []) {
+      if (dish) this.potDeck.push(dish);
+    }
+
+    this.hand = [null, null, null];
+  }
+
+  restockPot() {
+    while (this.potDeck.length < DAILY_POT_TARGET) {
+      this.potDeck.push(makeRandomPotDish());
+    }
+  }
+
+  refillHand() {
+    for (let i = 0; i < HAND_SIZE; i++) {
+      if (!this.hand[i]) {
+        this.hand[i] = this.drawFromPot();
+      }
+    }
+  }
+
+  drawFromPot() {
+    if (this.potDeck.length === 0) return null;
+
+    const index = Math.floor(Math.random() * this.potDeck.length);
+    return this.potDeck.splice(index, 1)[0];
   }
 
   nextCustomer() {
     if (this.currentIndex >= this.customers.length) {
-      this.state = STATE.SUMMARY;
+      this.finishDay();
+      return;
+    }
+
+    if (!this.hasAnyStock()) {
+      this.finishDay();
       return;
     }
 
     this.currentCustomer = this.customers[this.currentIndex];
+    this.served = [];
+    this.total = 0;
     this.message = this.currentCustomer.line;
     this.state = STATE.ARRIVAL;
     this.animT = 0;
-    this.customerX = GAME_W + 50;
+    this.customerX = GAME_W + 40;
   }
 
-  createFirstOptions() {
-    const c = this.currentCustomer;
-    let ideal = INGREDIENTS.filter(i => c.idealFirst.includes(i.id));
-    let okay = INGREDIENTS.filter(i => c.okayFirst.includes(i.id));
-    let bad = INGREDIENTS.filter(i => c.badFirst.includes(i.id));
-
-    if (ideal.length === 0) ideal = [INGREDIENTS[0]];
-    if (okay.length === 0) okay = [INGREDIENTS[1]];
-    if (bad.length === 0) bad = [INGREDIENTS[2]];
-
-    const pickRandom = arr => arr[Math.floor(Math.random() * arr.length)];
-
-    this.options = [
-      pickRandom(ideal),
-      pickRandom(okay),
-      pickRandom(bad)
-    ].sort(() => Math.random() - 0.5);
+  hasAnyStock() {
+    return this.potDeck.length > 0 || this.hand.some(dish => dish);
   }
 
-  resolveFirst(idx) {
-    const dish = this.options[idx];
-    const c = this.currentCustomer;
+  handDish(index) {
+    return this.hand[index] || null;
+  }
 
-    this.soldCounts[dish.name] = (this.soldCounts[dish.name] || 0) + 1;
+  serveFromHand(index) {
+    const dish = this.handDish(index);
+    if (!dish) return;
 
-    if (c.idealFirst.includes(dish.id)) {
-      this.sales += dish.price;
-      this.satisfaction += 3;
-      this.regulars += 1;
-      this.message = c.successLine;
-      this.state = STATE.FIRST_RESULT;
-      this.canSecond = true;
-    } else if (c.okayFirst.includes(dish.id)) {
-      this.sales += dish.price;
-      this.satisfaction += 1;
-      this.message = c.okayLine;
-      this.state = STATE.FIRST_RESULT;
-      this.canSecond = true;
-    } else {
-      this.satisfaction -= 1;
-      this.message = c.missLine;
-      this.state = STATE.FIRST_RESULT;
-      this.canSecond = false;
+    this.hand[index] = null;
+    this.serveDish(dish, "HAND");
+  }
+
+  gambleFromPot() {
+    const dish = this.drawFromPot();
+
+    if (!dish) {
+      this.message = "鍋の底が見えている。\n今日はここで、会計にしよう。";
+      this.state = STATE.SERVE;
+      return;
     }
+
+    this.serveDish(dish, "POT");
   }
 
-  createSecondOptions() {
-    const c = this.currentCustomer;
-    let good = INGREDIENTS.filter(i => c.goodSecond.includes(i.id));
-    let bad = INGREDIENTS.filter(i => c.badSecond.includes(i.id));
+  serveDish(dish, source) {
+    if (!dish || this.state === STATE.RESULT) return;
 
-    if (good.length === 0) good = [INGREDIENTS[0]];
-    if (bad.length === 0) bad = [INGREDIENTS[2]];
-
-    const pickRandom = arr => arr[Math.floor(Math.random() * arr.length)];
-
-    this.secondOptions = [
-      pickRandom(good),
-      pickRandom(bad)
-    ].sort(() => Math.random() - 0.5);
-  }
-
-  resolveSecond(idx) {
-    const dish = this.secondOptions[idx];
-    const c = this.currentCustomer;
-
-    this.soldCounts[dish.name] = (this.soldCounts[dish.name] || 0) + 1;
+    this.served.push({ dish: dish, source: source });
+    this.total += dish.value;
     this.sales += dish.price;
+    this.totalSales += dish.price;
+    this.soldCounts[dish.name] = (this.soldCounts[dish.name] || 0) + 1;
 
-    if (c.goodSecond.includes(dish.id)) {
-      this.satisfaction += 2;
-      this.regulars += 1;
-      this.message = "お代わり、ありがとうね。";
-    } else if (c.badSecond.includes(dish.id)) {
-      this.satisfaction -= 2;
-      this.regulars = Math.max(0, this.regulars - 1);
-      this.message = c.oversoldLine;
-    } else {
-      this.message = "はいよ、お待ちどうさま。";
+    if (this.total >= BJ_TARGET) {
+      this.resolveCustomer();
+      return;
     }
 
-    this.state = STATE.SECOND_RESULT;
+    this.message =
+      `${dish.name}を、小皿によそった。\n` +
+      `いま ${this.total} / ${BJ_TARGET}。どうする?`;
+
+    this.state = STATE.SERVE;
+  }
+
+  stand() {
+    if (this.served.length === 0) return;
+    this.resolveCustomer();
+  }
+
+  resolveCustomer() {
+    const customer = this.currentCustomer;
+    let scoreChange = 0;
+
+    if (this.total > BJ_TARGET) {
+      scoreChange = -2;
+      this.message = `${customer.name}は箸を置いた。\n「${this.total}は、ちょっと食べすぎたかも」`;
+    } else if (this.total === BJ_TARGET) {
+      scoreChange = 3;
+      this.dailyExact += 1;
+      this.totalExact += 1;
+      this.message = `${customer.name}が、小さく笑った。\n「${customer.exact}」`;
+    } else if (this.total >= 18) {
+      scoreChange = 2;
+      this.message = `${customer.name}は湯気を見つめた。\n「${customer.high}」`;
+    } else if (this.total >= 14) {
+      scoreChange = 1;
+      this.message = `${customer.name}は、ゆっくり席を立った。\n「${customer.okay}」`;
+    } else {
+      scoreChange = -1;
+      this.message = `${customer.name}は少し迷ってから立ち上がった。\n「${customer.low}」`;
+    }
+
+    this.satisfaction += scoreChange;
+    this.shopMood = clamp(this.shopMood + scoreChange, -20, 30);
+    this.state = STATE.RESULT;
   }
 
   depart() {
     this.state = STATE.DEPARTURE;
     this.animT = 0;
   }
+
+  finishDay() {
+    if (this.dailyExact >= 2) {
+      this.dayClosingLine = "今夜は、ちょうどいい湯気が\n何度も横丁に残った。";
+    } else if (this.dailyExact === 1) {
+      this.dayClosingLine = "一人ぶんの「ちょうど」が、\n提灯の下に残っている。";
+    } else if (this.satisfaction <= -3) {
+      this.dayClosingLine = "今夜は少し、よそいすぎた。\n鍋の湯気だけが、まだ元気だ。";
+    } else if (this.sales >= 1000) {
+      this.dayClosingLine = "よく売れた夜だった。\n鍋の底が、ゆっくり見えている。";
+    } else {
+      this.dayClosingLine = "今夜の鍋は、\n静かにだしを残している。";
+    }
+
+    this.tomorrowHint =
+      `明日の仕込み前:残り ${this.totalStock()}品\n` +
+      "朝の鍋に、また少し具が足される。";
+
+    this.state = STATE.SUMMARY;
+  }
+
+  totalStock() {
+    return this.potDeck.length + this.hand.filter(dish => dish).length;
+  }
+
+  familyCounts() {
+    const counts = { light: 0, warm: 0, feast: 0 };
+
+    for (const dish of this.potDeck) {
+      if (dish.family === "LIGHT") counts.light += 1;
+      else if (dish.family === "WARM") counts.warm += 1;
+      else counts.feast += 1;
+    }
+
+    return counts;
+  }
 }
 
-let model;
-
 // ==========================================
-// Codea Lite Hooks
+// Game setup / input
 // ==========================================
 function setup() {
   model = new GameModel();
   resized();
 }
 
-const NIGHT_CONTEXTS = [
-    {
-        id: "RAIN",
-        label: "雨の夜",
-        intro: "雨音が、屋台の屋根を細く叩いている。",
-        forecast: "明日は少し、雲が切れそうだ。"
-    },
-    {
-        id: "COLD",
-        label: "冷える夜",
-        intro: "吐く息が白く、だしの湯気がいつもより濃い。",
-        forecast: "明日も、帰り道は冷えそうだ。"
-    },
-    {
-        id: "BUSY",
-        label: "にぎやかな夜",
-        intro: "温泉帰りの人影が、通りをゆっくり流れている。",
-        forecast: "明日は少し、横丁が静かになりそうだ。"
-    },
-    {
-        id: "QUIET",
-        label: "静かな夜",
-        intro: "通りの足音が少なく、提灯だけが揺れている。",
-        forecast: "明日は、誰かが少し遅れて帰ってくるかもしれない。"
-    }
-];
-
-function clampValue(value, minValue, maxValue) {
-    return Math.max(minValue, Math.min(maxValue, value));
-}
-
-GameModel.prototype.reset = function() {
-    this.state = STATE.TITLE;
-
-    this.day = 1;
-    this.sales = 0;
-    this.totalSales = 0;
-    this.satisfaction = 0;
-    this.regulars = 0;
-    this.shopWarmth = 0;
-
-    this.soldCounts = {};
-    this.customerMemory = {};
-
-    this.customers = [];
-    this.currentIndex = 0;
-    this.currentCustomer = null;
-
-    this.options = [];
-    this.secondOptions = [];
-    this.message = "";
-
-    this.animT = 0;
-    this.customerX = GAME_W + 50;
-    this.canSecond = false;
-
-    this.night = null;
-    this.pendingNight = null;
-    this.lastNightId = "";
-
-    this.dayClosingLine = "";
-    this.tomorrowHint = "";
-};
-
-GameModel.prototype.startNewRun = function() {
-    this.reset();
-    this.beginDay();
-    this.nextCustomer();
-};
-
-GameModel.prototype.getCustomerMemory = function(customerId) {
-    if (!this.customerMemory[customerId]) {
-        this.customerMemory[customerId] = {
-            trust: 0,
-            visits: 0,
-            lastDish: "",
-            lastVisitDay: 0,
-            lastServedDay: 0
-        };
-    }
-
-    return this.customerMemory[customerId];
-};
-
-GameModel.prototype.getRegularCount = function() {
-    let count = 0;
-
-    for (const customer of CUSTOMERS_DB) {
-        const memory = this.getCustomerMemory(customer.id);
-
-        if (memory.trust >= 3) {
-            count++;
-        }
-    }
-
-    return count;
-};
-
-GameModel.prototype.pickNightContext = function() {
-    let candidates = NIGHT_CONTEXTS.filter(context => context.id !== this.lastNightId);
-
-    if (candidates.length === 0) {
-        candidates = NIGHT_CONTEXTS;
-    }
-
-    const picked = candidates[Math.floor(Math.random() * candidates.length)];
-
-    this.lastNightId = picked.id;
-
-    return picked;
-};
-
-GameModel.prototype.getCustomerWeight = function(customer) {
-    const memory = this.getCustomerMemory(customer.id);
-    const daysSinceVisit = this.day - memory.lastVisitDay;
-
-    let weight = 1.0;
-
-    if (memory.visits === 0) {
-        weight += 0.9;
-    }
-
-    if (memory.trust >= 3) {
-        weight += 1.3;
-    } else if (memory.trust > 0) {
-        weight += 0.45;
-    }
-
-    if (memory.trust <= -2) {
-        weight *= 0.45;
-    }
-
-    if (memory.lastVisitDay === this.day - 1) {
-        weight *= 0.6;
-    }
-
-    if (daysSinceVisit >= 3) {
-        weight += 0.7;
-    }
-
-    return Math.max(0.15, weight);
-};
-
-GameModel.prototype.createDailyCustomerList = function() {
-    const pool = [...CUSTOMERS_DB];
-    const picked = [];
-    const customerCount = 4;
-
-    while (picked.length < customerCount && pool.length > 0) {
-        let totalWeight = 0;
-
-        for (const customer of pool) {
-            totalWeight += this.getCustomerWeight(customer);
-        }
-
-        let roll = Math.random() * totalWeight;
-        let selectedIndex = 0;
-
-        for (let i = 0; i < pool.length; i++) {
-            roll -= this.getCustomerWeight(pool[i]);
-
-            if (roll <= 0) {
-                selectedIndex = i;
-                break;
-            }
-        }
-
-        picked.push(pool[selectedIndex]);
-        pool.splice(selectedIndex, 1);
-    }
-
-    return picked;
-};
-
-GameModel.prototype.beginDay = function() {
-    this.sales = 0;
-    this.satisfaction = 0;
-    this.soldCounts = {};
-
-    this.currentIndex = 0;
-    this.currentCustomer = null;
-    this.options = [];
-    this.secondOptions = [];
-    this.message = "";
-    this.canSecond = false;
-
-    this.night = this.pendingNight || this.pickNightContext();
-    this.pendingNight = null;
-
-    this.customers = this.createDailyCustomerList();
-    this.regulars = this.getRegularCount();
-};
-
-GameModel.prototype.beginNextDay = function() {
-    this.day += 1;
-    this.beginDay();
-    this.nextCustomer();
-};
-
-GameModel.prototype.getArrivalLine = function(customer) {
-    const memory = this.getCustomerMemory(customer.id);
-
-    if (memory.visits >= 2 && memory.trust >= 4) {
-        return "この前の、助かったよ。\n今夜も少しだけ、頼っていいかな。";
-    }
-
-    if (memory.visits >= 2 && memory.trust >= 3) {
-        return "こんばんは。\n今日は、あの屋台に寄ろうと思ってた。";
-    }
-
-    if (memory.visits >= 2 && memory.trust <= -2) {
-        return "今日は、通りがかりだったから。\n一品だけ、もらっていこうかな。";
-    }
-
-    return customer.line;
-};
-
-GameModel.prototype.nextCustomer = function() {
-    if (this.currentIndex >= this.customers.length) {
-        this.finishDay();
-        return;
-    }
-
-    this.currentCustomer = this.customers[this.currentIndex];
-
-    const memory = this.getCustomerMemory(this.currentCustomer.id);
-
-    memory.visits += 1;
-    memory.lastVisitDay = this.day;
-
-    this.message = this.getArrivalLine(this.currentCustomer);
-    this.state = STATE.ARRIVAL;
-    this.animT = 0;
-    this.customerX = GAME_W + 50;
-};
-
-GameModel.prototype.recordSale = function(dish) {
-    this.soldCounts[dish.name] = (this.soldCounts[dish.name] || 0) + 1;
-
-    this.sales += dish.price;
-    this.totalSales += dish.price;
-
-    if (this.currentCustomer) {
-        const memory = this.getCustomerMemory(this.currentCustomer.id);
-
-        memory.lastDish = dish.id;
-        memory.lastServedDay = this.day;
-    }
-};
-
-GameModel.prototype.adjustTrust = function(customer, amount) {
-    const memory = this.getCustomerMemory(customer.id);
-
-    memory.trust = clampValue(memory.trust + amount, -5, 8);
-    this.shopWarmth = clampValue(this.shopWarmth + amount, -12, 20);
-    this.regulars = this.getRegularCount();
-};
-
-GameModel.prototype.resolveFirst = function(idx) {
-    const dish = this.options[idx];
-    const customer = this.currentCustomer;
-
-    if (customer.idealFirst.includes(dish.id)) {
-        this.recordSale(dish);
-        this.satisfaction += 3;
-        this.adjustTrust(customer, 2);
-
-        this.message = customer.successLine;
-        this.state = STATE.FIRST_RESULT;
-        this.canSecond = true;
-    } else if (customer.okayFirst.includes(dish.id)) {
-        this.recordSale(dish);
-        this.satisfaction += 1;
-        this.adjustTrust(customer, 1);
-
-        this.message = customer.okayLine;
-        this.state = STATE.FIRST_RESULT;
-        this.canSecond = true;
-    } else {
-        this.satisfaction -= 1;
-        this.adjustTrust(customer, -2);
-
-        this.message = customer.missLine;
-        this.state = STATE.FIRST_RESULT;
-        this.canSecond = false;
-    }
-};
-
-GameModel.prototype.resolveSecond = function(idx) {
-    const dish = this.secondOptions[idx];
-    const customer = this.currentCustomer;
-
-    this.recordSale(dish);
-
-    if (customer.goodSecond.includes(dish.id)) {
-        this.satisfaction += 2;
-        this.adjustTrust(customer, 1);
-
-        this.message = "お代わり、ありがとうね。";
-    } else if (customer.badSecond.includes(dish.id)) {
-        this.satisfaction -= 2;
-        this.adjustTrust(customer, -2);
-
-        this.message = customer.oversoldLine;
-    } else {
-        this.message = "はいよ、お待ちどうさま。";
-    }
-
-    this.state = STATE.SECOND_RESULT;
-};
-
-GameModel.prototype.buildDayClosingLine = function() {
-    if (this.satisfaction >= 7 && this.regulars >= 2) {
-        return "湯気の向こうで、\n何人かの顔がほどけた。";
-    }
-
-    if (this.satisfaction >= 4) {
-        return "今夜のだしは、\n誰かの帰り道に残った。";
-    }
-
-    if (this.satisfaction <= -2) {
-        return "少しだけ、言葉を急ぎすぎた夜だった。";
-    }
-
-    if (this.sales >= 700) {
-        return "よく売れた夜だった。\nけれど、顔までは見えていただろうか。";
-    }
-
-    return "今夜の横丁は、\n静かに一日を閉じていった。";
-};
-
-GameModel.prototype.finishDay = function() {
-    this.pendingNight = this.pickNightContext();
-
-    this.dayClosingLine = this.buildDayClosingLine();
-    this.tomorrowHint = `明日の気配：${this.pendingNight.label}\n${this.pendingNight.forecast}`;
-
-    this.state = STATE.SUMMARY;
-};
-
-
 function resized() {
-  const scaleX = WIDTH / GAME_W;
-  const scaleY = HEIGHT / GAME_H;
-
-  scaleFactor = Math.min(scaleX, scaleY);
+  const sx = WIDTH / GAME_W;
+  const sy = HEIGHT / GAME_H;
+  scaleFactor = Math.min(sx, sy);
   offsetX = (WIDTH - GAME_W * scaleFactor) / 2;
   offsetY = (HEIGHT - GAME_H * scaleFactor) / 2;
 }
 
 function touched(touch) {
-  if (ElapsedTime < inputLockTimer) return;
+  if (ElapsedTime < inputLockUntil) return;
+  if (touch.state !== ENDED) return;
 
-  const gx = (touch.x - offsetX) / scaleFactor;
-  const gy = (touch.y - offsetY) / scaleFactor;
+  const x = (touch.x - offsetX) / scaleFactor;
+  const y = (touch.y - offsetY) / scaleFactor;
 
-  if (gx < 0 || gx > GAME_W || gy < 0 || gy > GAME_H) return;
-
-  if (touch.state === ENDED) {
-    handleTap(gx, gy);
-  }
+  if (x < 0 || x > GAME_W || y < 0 || y > GAME_H) return;
+  handleTap(x, y);
 }
 
 function lockInput() {
-  inputLockTimer = ElapsedTime + 0.25;
+  inputLockUntil = ElapsedTime + 0.18;
 }
 
-function isInside(x, y, rx, ry, rw, rh) {
+function handleTap(x, y) {
+  if (model.state === STATE.TITLE) {
+    model.startNewRun();
+    lockInput();
+    return;
+  }
+
+  if (model.state === STATE.ARRIVAL) {
+    if (model.animT > 0.25) model.animT = 1;
+    return;
+  }
+
+  if (model.state === STATE.SERVE) {
+    for (let i = 0; i < HAND_SIZE; i++) {
+      const slot = handSlotRect(i);
+      if (model.handDish(i) && inside(x, y, slot.x, slot.y, slot.w, slot.h)) {
+        model.serveFromHand(i);
+        lockInput();
+        return;
+      }
+    }
+
+    if (model.served.length > 0) {
+      const stand = standRect();
+      if (inside(x, y, stand.x, stand.y, stand.w, stand.h)) {
+        model.stand();
+        lockInput();
+        return;
+      }
+    }
+
+    const gamble = gambleRect(model.served.length === 0);
+    if (model.potDeck.length > 0 && inside(x, y, gamble.x, gamble.y, gamble.w, gamble.h)) {
+      model.gambleFromPot();
+      lockInput();
+    }
+    return;
+  }
+
+  if (model.state === STATE.RESULT) {
+    model.depart();
+    lockInput();
+    return;
+  }
+
+  if (model.state === STATE.DEPARTURE) {
+    if (model.animT > 0.25) model.animT = 1;
+    return;
+  }
+
+  if (model.state === STATE.SUMMARY) {
+    const next = nextDayRect();
+    if (inside(x, y, next.x, next.y, next.w, next.h)) {
+      model.startNextDay();
+      lockInput();
+    }
+  }
+}
+
+function updateGame() {
+  if (model.state !== STATE.ARRIVAL && model.state !== STATE.DEPARTURE) return;
+
+  model.animT = Math.min(1, model.animT + DeltaTime * 1.6);
+
+  if (model.state === STATE.ARRIVAL) {
+    model.customerX = lerp(GAME_W + 38, 140, easeOut(model.animT));
+
+    if (model.animT >= 1) {
+      model.state = STATE.SERVE;
+    }
+    return;
+  }
+
+  model.customerX = lerp(140, -38, easeIn(model.animT));
+
+  if (model.animT >= 1) {
+    model.refillHand();
+    model.currentIndex += 1;
+    model.nextCustomer();
+  }
+}
+
+// ==========================================
+// Layout helpers
+// ==========================================
+function handSlotRect(index) {
+  return { x: 10 + index * 54, y: 32, w: 52, h: 31 };
+}
+
+function standRect() {
+  return { x: 10, y: 7, w: 76, h: 18 };
+}
+
+function gambleRect(firstServe) {
+  if (firstServe) return { x: 30, y: 7, w: 120, h: 18 };
+  return { x: 94, y: 7, w: 76, h: 18 };
+}
+
+function nextDayRect() {
+  return { x: 33, y: 40, w: 114, h: 28 };
+}
+
+function inside(x, y, rx, ry, rw, rh) {
   return x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
 }
 
-function rectFromTop(x, topY, w, h) {
-    return {
-        x: x,
-        y: GAME_H - topY - h,
-        w: w,
-        h: h
-    };
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
-function textYFromTop(topY) {
-    return GAME_H - topY;
+function lerp(a, b, t) {
+  return a + (b - a) * t;
 }
 
-function getDecisionButtonRects() {
-    return {
-        close: rectFromTop(10, 217, 160, 40),
-        more: rectFromTop(10, 268, 160, 40)
-    };
+function easeOut(t) {
+  return t * (2 - t);
 }
 
-
-function getChoiceCardRect(index, count) {
-    if (count === 2) {
-        // 上から 0番目、1番目の順に並べる
-        return rectFromTop(10, 222 + index * 48, 160, 42);
-    }
-
-    // 上から options[0]、options[1]、options[2] の順に並べる
-    return rectFromTop(10, 204 + index * 38, 160, 34);
+function easeIn(t) {
+  return t * t;
 }
 
+function shuffleCopy(array) {
+  return [...array].sort(() => Math.random() - 0.5);
+}
+
+function makeRandomPotDish() {
+  const roll = Math.random();
+
+  if (roll < 0.26) return randomIngredientByFamily("LIGHT");
+  if (roll < 0.74) return randomIngredientByFamily("WARM");
+  return randomIngredientByFamily("FEAST");
+}
+
+function randomIngredientByFamily(family) {
+  const candidates = INGREDIENTS.filter(item => item.family === family);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
 
 // ==========================================
-// Game Logic
-// ==========================================
-function handleTap(x, y) {
-    switch (model.state) {
-        case STATE.TITLE:
-            model.startBlackjackRun();
-            lockInput();
-            break;
-
-        case STATE.ARRIVAL:
-            if (model.animT > 0.3) {
-                model.animT = 1;
-            }
-            break;
-
-        case STATE.FIRST_CHOICE: {
-            for (let i = 0; i < HAND21_SIZE; i++) {
-                const slot = hand21SlotRect(i);
-
-                if (
-                    model.getBlackjackHandDish(i) &&
-                    isInside(x, y, slot.x, slot.y, slot.w, slot.h)
-                ) {
-                    model.serveFromBlackjackHand(i);
-                    lockInput();
-                    return;
-                }
-            }
-
-            const gamble = hand21FirstGambleRect();
-
-            if (isInside(x, y, gamble.x, gamble.y, gamble.w, gamble.h)) {
-                model.hitBlackjack();
-                lockInput();
-            }
-
-            break;
-        }
-
-        case STATE.SECOND_DECISION: {
-            for (let i = 0; i < HAND21_SIZE; i++) {
-                const slot = hand21SlotRect(i);
-
-                if (
-                    model.getBlackjackHandDish(i) &&
-                    isInside(x, y, slot.x, slot.y, slot.w, slot.h)
-                ) {
-                    model.serveFromBlackjackHand(i);
-                    lockInput();
-                    return;
-                }
-            }
-
-            const stand = hand21StandRect();
-            const gamble = hand21GambleRect();
-
-            if (isInside(x, y, stand.x, stand.y, stand.w, stand.h)) {
-                model.standBlackjack();
-                lockInput();
-            } else if (
-                isInside(x, y, gamble.x, gamble.y, gamble.w, gamble.h)
-            ) {
-                model.hitBlackjack();
-                lockInput();
-            }
-
-            break;
-        }
-
-        case STATE.SECOND_RESULT:
-            model.state = STATE.DEPARTURE;
-            model.animT = 0;
-            lockInput();
-            break;
-
-        case STATE.DEPARTURE:
-            if (model.animT > 0.3) {
-                model.animT = 1;
-            }
-            break;
-
-        case STATE.SUMMARY:
-            if (isInside(x, y, 33, 40, 114, 28)) {
-                model.beginNextBlackjackDay();
-                lockInput();
-            }
-            break;
-    }
-}
-
-
-
-
-
-
-
-
-// ==========================================
-// Drawing
+// Rendering
 // ==========================================
 function draw() {
   background(17, 19, 29);
@@ -793,15 +571,9 @@ function draw() {
   pushMatrix();
   translate(offsetX, offsetY);
   scale(scaleFactor, scaleFactor);
-
   pushClip(0, 0, GAME_W, GAME_H);
 
-  noStroke();
-  fill(20, 25, 40);
-  rectMode(CORNER);
-  rect(0, 0, GAME_W, GAME_H);
-
-  updateAnimations();
+  updateGame();
 
   if (model.state === STATE.TITLE) {
     drawTitle();
@@ -809,7 +581,7 @@ function draw() {
     drawBackground();
     drawCustomer();
     drawStall();
-    drawUI();
+    drawGameUI();
 
     if (model.state === STATE.SUMMARY) {
       drawSummary();
@@ -820,116 +592,8 @@ function draw() {
   popMatrix();
 }
 
-function updateAnimations() {
-    model.animT += DeltaTime * 1.5;
-
-    if (model.animT > 1) {
-        model.animT = 1;
-    }
-
-    const targetX = 140;
-
-    if (model.state === STATE.ARRIVAL) {
-        model.customerX = lerp(
-            GAME_W + 40,
-            targetX,
-            easeOut(model.animT)
-        );
-
-        if (model.animT === 1) {
-            model.prepareBlackjackCustomer();
-            model.state = STATE.FIRST_CHOICE;
-        }
-    } else if (model.state === STATE.DEPARTURE) {
-        model.customerX = lerp(
-            targetX,
-            -40,
-            easeIn(model.animT)
-        );
-
-        if (model.animT === 1) {
-            // 客が帰った後にだけ、仕込み台を3品まで補充する。
-            model.refillBlackjackHand();
-
-            model.currentIndex++;
-            model.nextBlackjackCustomer();
-        }
-    }
-}
-
-
-
-
-
-
-function easeOut(t) {
-  return t * (2 - t);
-}
-
-function easeIn(t) {
-  return t * t;
-}
-
 // ==========================================
-// Drawing Helpers
-// ==========================================
-function drawPixelArt(px, py, dataArray, size = 2) {
-  if (!dataArray) return;
-
-  noStroke();
-
-  for (let r = 0; r < dataArray.length; r++) {
-    const row = dataArray[r];
-
-    for (let c = 0; c < row.length; c++) {
-      const char = row[c];
-      const col = PALETTE[char];
-
-      if (col) {
-        fill(col.r, col.g, col.b);
-
-        const drawY = py + (dataArray.length - 1 - r) * size;
-        const drawX = px + c * size;
-
-        rect(drawX, drawY, size, size);
-      }
-    }
-  }
-}
-
-function drawSplitText(str, x, y, maxLen, lineH) {
-  textAlign("left");
-
-  let cy = y;
-  let currentLine = "";
-  const lines = [];
-
-  const rawLines = str.split("\n");
-
-  for (const raw of rawLines) {
-    for (let i = 0; i < raw.length; i++) {
-      currentLine += raw[i];
-
-      if (currentLine.length >= maxLen) {
-        lines.push(currentLine);
-        currentLine = "";
-      }
-    }
-
-    if (currentLine.length > 0) {
-      lines.push(currentLine);
-      currentLine = "";
-    }
-  }
-
-  for (let i = lines.length - 1; i >= 0; i--) {
-    text(lines[i], x, cy);
-    cy += lineH;
-  }
-}
-
-// ==========================================
-// Scene Drawers
+// Scene
 // ==========================================
 function drawBackground() {
   rectMode(CORNER);
@@ -949,8 +613,8 @@ function drawBackground() {
   rect(130, 184, 25, 60);
   rect(158, 184, 22, 94);
 
-  const windowGlow = 112 + Math.sin(ElapsedTime * 1.2) * 12;
-  fill(224, 181, 96, windowGlow);
+  const glow = 112 + Math.sin(ElapsedTime * 1.2) * 12;
+  fill(224, 181, 96, glow);
   rect(10, 211, 6, 10);
   rect(40, 231, 7, 11);
   rect(69, 204, 6, 10);
@@ -978,2766 +642,598 @@ function drawBackground() {
 }
 
 function drawStall() {
-    rectMode(CORNER);
-    noStroke();
-
-    fill(46, 33, 32);
-    rect(8, 206, 118, 62);
-
-    fill(68, 45, 39);
-    rect(12, 210, 110, 54);
-
-    fill(122, 57, 47);
-    rect(16, 225, 45, 29);
-    rect(63, 225, 45, 29);
-    rect(110, 225, 8, 29);
-
-    fill(239, 221, 184);
-    rect(22, 232, 32, 14);
-
-    fill(86, 47, 40);
-    textSize(8);
-    textAlign("center");
-    text("おでん", 38, 235);
-
-    fill(82, 53, 40);
-    rect(5, 178, GAME_W - 10, 9);
-
-    fill(127, 80, 53);
-    rect(5, 187, GAME_W - 10, 4);
-
-    fill(72, 46, 37);
-    rect(10, 191, GAME_W - 20, 20);
-
-    fill(52, 57, 65);
-    rect(18, 196, 112, 31);
-
-    fill(107, 112, 117);
-    rect(21, 199, 106, 25);
-
-    fill(48, 50, 55);
-    rect(24, 202, 100, 18);
-
-    fill(203, 145, 69);
-    rect(26, 204, 96, 14);
-
-    fill(255, 219, 145, 10 + Math.sin(ElapsedTime * 2) * 3);
-    rect(26, 214, 96, 3);
-
-    fill(91, 96, 101);
-    rect(49, 202, 3, 18);
-    rect(75, 202, 3, 18);
-    rect(101, 202, 3, 18);
-
-    drawPixelArt(31, 205, ART.daikon, 2);
-    drawPixelArt(57, 205, ART.egg, 2);
-    drawPixelArt(83, 205, ART.ganmo, 2);
-    drawPixelArt(109, 205, ART.chikuwa, 2);
-
-    // 二人連れの夜でも顔に重ならない、少し細い提灯。
-    const swing = Math.sin(ElapsedTime * 1.6) * 3;
-
-    pushMatrix();
-    translate(171, 258);
-    rotate(swing);
-
-    rectMode(CENTER);
-
-    fill(113, 45, 42);
-    rect(0, 0, 18, 33);
-
-    fill(188, 71, 59);
-    rect(0, 0, 13, 27);
-
-    fill(243, 219, 177);
-    rect(0, 7, 9, 2);
-
-    fill(50, 32, 29);
-    textSize(6);
-    textAlign("center");
-    text("お", 0, 10);
-    text("で", 0, 3);
-    text("ん", 0, -4);
-
-    popMatrix();
-
-    rectMode(CORNER);
-
-    fill(244, 240, 226, 30);
-    const steam = Math.sin(ElapsedTime * 1.2) * 3;
-
-    rect(36, 229 + steam, 8, 15);
-    rect(70, 232 - steam, 10, 17);
-    rect(104, 228 + steam * 0.7, 8, 18);
-}
-
-
-
-function drawCustomer() {
-    if (!model.currentCustomer) return;
-
-    const x = model.customerX;
-    const y = 183;
-    const customer = model.currentCustomer;
-
-    let coat = { r: 58, g: 70, b: 83 };
-    let hair = { r: 42, g: 37, b: 35 };
-    let accent = { r: 118, g: 132, b: 144 };
-
-    if (customer.visual === "regular_worker") {
-        coat = { r: 91, g: 68, b: 53 };
-        accent = { r: 170, g: 134, b: 85 };
-    } else if (customer.visual === "happy_worker") {
-        coat = { r: 92, g: 65, b: 62 };
-        accent = { r: 205, g: 134, b: 83 };
-    } else if (customer.visual === "inn_worker") {
-        coat = { r: 59, g: 81, b: 71 };
-        hair = { r: 54, g: 44, b: 37 };
-        accent = { r: 198, g: 178, b: 135 };
-    } else if (customer.visual === "tourist") {
-        coat = { r: 89, g: 113, b: 132 };
-        hair = { r: 108, g: 78, b: 50 };
-        accent = { r: 216, g: 187, b: 116 };
-    } else if (customer.visual === "student") {
-        coat = { r: 72, g: 87, b: 117 };
-        hair = { r: 34, g: 35, b: 42 };
-        accent = { r: 190, g: 198, b: 209 };
-    }
-
-    fill(10, 13, 19, 110);
-    rectMode(CORNER);
-    rect(x - 17, y, 34, 4);
-
-    fill(coat.r, coat.g, coat.b);
-    rect(x - 14, y + 3, 28, 37);
-
-    fill(accent.r, accent.g, accent.b);
-    rect(x - 5, y + 34, 10, 8);
-
-    if (customer.visual === "tourist") {
-        fill(126, 83, 48);
-        rect(x + 11, y + 10, 8, 14);
-
-        fill(215, 192, 148);
-        rect(x + 12, y + 17, 6, 4);
-    } else if (
-        customer.visual === "office_worker" ||
-        customer.visual === "inn_worker"
-    ) {
-        fill(39, 42, 48);
-        rect(x - 20, y + 10, 7, 14);
-    } else if (customer.visual === "student") {
-        fill(42, 52, 73);
-        rect(x - 20, y + 10, 7, 15);
-    }
-
-    fill(231, 196, 166);
-    rect(x - 10, y + 40, 20, 22);
-
-    fill(hair.r, hair.g, hair.b);
-    rect(x - 11, y + 57, 22, 7);
-    rect(x - 11, y + 50, 4, 10);
-
-    fill(35, 31, 31);
-    rect(x - 5, y + 51, 2, 2);
-    rect(x + 3, y + 51, 2, 2);
-
-    const pleased =
-        (model.state === STATE.FIRST_RESULT && model.canSecond) ||
-        (
-            model.state === STATE.SECOND_RESULT &&
-            !model.message.includes("急いでいた")
-        );
-
-    if (pleased) {
-        rect(x - 3, y + 45, 6, 2);
-    } else if (model.state === STATE.FIRST_RESULT && !model.canSecond) {
-        rect(x - 3, y + 46, 6, 2);
-    } else {
-        rect(x - 2, y + 45, 4, 1);
-    }
-
-    if (customer.visual === "student") {
-        noFill();
-        stroke(119, 139, 174);
-        strokeWidth(2);
-        rect(x - 14, y + 42, 28, 25);
-        noStroke();
-    }
-
-    // ユキさんは野々村さんの少し後ろ、右側に並べる。
-    // 鍋と屋台の建物に隠れない高さへ少し持ち上げる。
-    if (model.activeRelationEvent && model.eventGuest) {
-        drawRelationGuest(
-            model.eventGuest,
-            x + 24,
-            y + 4
-        );
-    }
-}
-
-
-
-function drawUI() {
-    rectMode(CORNER);
-    noStroke();
-
-    fill(11, 14, 22, 242);
-    rect(0, 292, GAME_W, 28);
-
-    fill(95, 71, 56);
-    rect(0, 292, GAME_W, 2);
-
-    fill(241, 230, 203);
-    textSize(10);
-    textAlign("left");
-    text("今夜のおでん", 8, 303);
-
-    fill(182, 190, 204);
-    textSize(8);
-    textAlign("center");
-    text(
-        `第${model.day}夜　${model.currentIndex + 1}/${model.customers.length}人目`,
-        GAME_W / 2,
-        303
-    );
-
-    fill(241, 230, 203);
-    textSize(10);
-    textAlign("right");
-    text(`¥ ${model.sales}`, GAME_W - 8, 303);
-
-    textSize(8);
-    fill(151, 160, 177);
-    textAlign("left");
-    text(
-        `ぴったり ${model.todayExact21 || 0}　残り ${model.getBlackjackTotalStock()}品`,
-        8,
-        281
-    );
-
-    textAlign("right");
-    text(model.night ? model.night.label : "横丁の夜", GAME_W - 8, 281);
-
-    if (model.message && model.state !== STATE.SUMMARY) {
-        fill(17, 21, 29, 238);
-        rect(9, 132, 162, 41);
-
-        fill(95, 71, 56);
-        rect(9, 132, 162, 3);
-
-        let name = model.currentCustomer
-            ? model.currentCustomer.name
-            : "店主";
-
-        fill(239, 218, 185);
-        textSize(9);
-        textAlign("left");
-        text(name, 17, 160);
-
-        fill(211, 214, 219);
-        textSize(9);
-        drawSplitText(model.message, 17, 143, 18, 10);
-    }
-
-    drawBlackjackStatusPanel();
-
-    if (model.state === STATE.FIRST_CHOICE) {
-        drawBlackjackPot("FIRST");
-    } else if (model.state === STATE.SECOND_DECISION) {
-        drawBlackjackPot("DECISION");
-    } else {
-        drawBlackjackPot("READ");
-
-        if (model.state === STATE.SECOND_RESULT) {
-            drawTapToNext();
-        }
-    }
-}
-
-
-
-
-
-
-
-function drawIngredientCards(options, count) {
   rectMode(CORNER);
   noStroke();
 
-  for (let i = 0; i < count; i++) {
-    const item = options[i];
-    const card = getChoiceCardRect(i, count);
+  fill(46, 33, 32);
+  rect(8, 206, 118, 62);
 
-    const x = card.x;
-    const y = card.y;
-    const w = card.w;
-    const h = card.h;
+  fill(68, 45, 39);
+  rect(12, 210, 110, 54);
 
-    fill(70, 48, 37);
-    rect(x - 1, y - 1, w + 2, h + 2);
+  fill(122, 57, 47);
+  rect(16, 225, 45, 29);
+  rect(63, 225, 45, 29);
+  rect(110, 225, 8, 29);
 
-    fill(223, 207, 175);
-    rect(x + 1, y + 1, w - 2, h - 2);
+  fill(239, 221, 184);
+  rect(22, 232, 32, 14);
 
-    fill(246, 237, 214);
-    rect(x + 4, y + 4, w - 8, h - 8);
+  fill(86, 47, 40);
+  textSize(8);
+  textAlign("center");
+  text("おでん", 38, 235);
 
-    fill(177, 113, 68);
-    rect(x + 4, y + 4, 3, h - 8);
+  fill(82, 53, 40);
+  rect(5, 178, GAME_W - 10, 9);
 
-    drawPixelArt(x + 16, y + Math.floor((h - 12) / 2), ART[item.visual], 2);
+  fill(127, 80, 53);
+  rect(5, 187, GAME_W - 10, 4);
 
-    fill(61, 43, 35);
-    textSize(10);
-    textAlign("left");
-    text(item.name, x + 43, y + h - 17);
+  fill(72, 46, 37);
+  rect(10, 191, GAME_W - 20, 20);
 
-    fill(153, 72, 52);
-    textSize(9);
-    textAlign("right");
-    text(`¥${item.price}`, x + w - 10, y + h - 17);
+  fill(52, 57, 65);
+  rect(18, 196, 112, 31);
 
-    fill(92, 84, 74);
-    textSize(7);
-    textAlign("left");
-    text(item.shortDesc, x + 43, y + 8);
+  fill(107, 112, 117);
+  rect(21, 199, 106, 25);
+
+  fill(48, 50, 55);
+  rect(24, 202, 100, 18);
+
+  fill(203, 145, 69);
+  rect(26, 204, 96, 14);
+
+  fill(255, 219, 145, 10 + Math.sin(ElapsedTime * 2) * 3);
+  rect(26, 214, 96, 3);
+
+  fill(91, 96, 101);
+  rect(49, 202, 3, 18);
+  rect(75, 202, 3, 18);
+  rect(101, 202, 3, 18);
+
+  drawPixelArt(31, 205, ART.daikon, 2);
+  drawPixelArt(57, 205, ART.egg, 2);
+  drawPixelArt(83, 205, ART.ganmo, 2);
+  drawPixelArt(109, 205, ART.chikuwa, 2);
+
+  const swing = Math.sin(ElapsedTime * 1.6) * 3;
+  pushMatrix();
+  translate(171, 258);
+  rotate(swing);
+  rectMode(CENTER);
+
+  fill(113, 45, 42);
+  rect(0, 0, 18, 33);
+  fill(188, 71, 59);
+  rect(0, 0, 13, 27);
+  fill(243, 219, 177);
+  rect(0, 7, 9, 2);
+
+  fill(50, 32, 29);
+  textSize(6);
+  textAlign("center");
+  text("お", 0, 10);
+  text("で", 0, 3);
+  text("ん", 0, -4);
+
+  popMatrix();
+  rectMode(CORNER);
+
+  fill(244, 240, 226, 30);
+  const steam = Math.sin(ElapsedTime * 1.2) * 3;
+  rect(36, 229 + steam, 8, 15);
+  rect(70, 232 - steam, 10, 17);
+  rect(104, 228 + steam * 0.7, 8, 18);
+}
+
+function drawCustomer() {
+  if (!model.currentCustomer) return;
+
+  const x = model.customerX;
+  const y = 183;
+  const customer = model.currentCustomer;
+
+  let coat = { r: 58, g: 70, b: 83 };
+  let hair = { r: 42, g: 37, b: 35 };
+  let accent = { r: 118, g: 132, b: 144 };
+
+  if (customer.visual === "regular_worker") {
+    coat = { r: 91, g: 68, b: 53 };
+    accent = { r: 170, g: 134, b: 85 };
+  } else if (customer.visual === "happy_worker") {
+    coat = { r: 92, g: 65, b: 62 };
+    accent = { r: 205, g: 134, b: 83 };
+  } else if (customer.visual === "inn_worker") {
+    coat = { r: 59, g: 81, b: 71 };
+    hair = { r: 54, g: 44, b: 37 };
+    accent = { r: 198, g: 178, b: 135 };
+  } else if (customer.visual === "tourist") {
+    coat = { r: 89, g: 113, b: 132 };
+    hair = { r: 108, g: 78, b: 50 };
+    accent = { r: 216, g: 187, b: 116 };
+  } else if (customer.visual === "student") {
+    coat = { r: 72, g: 87, b: 117 };
+    hair = { r: 34, g: 35, b: 42 };
+    accent = { r: 190, g: 198, b: 209 };
+  }
+
+  fill(10, 13, 19, 110);
+  rect(x - 17, y, 34, 4);
+
+  fill(coat.r, coat.g, coat.b);
+  rect(x - 14, y + 3, 28, 37);
+
+  fill(accent.r, accent.g, accent.b);
+  rect(x - 5, y + 34, 10, 8);
+
+  if (customer.visual === "tourist") {
+    fill(126, 83, 48);
+    rect(x + 11, y + 10, 8, 14);
+    fill(215, 192, 148);
+    rect(x + 12, y + 17, 6, 4);
+  } else if (customer.visual === "office_worker" || customer.visual === "inn_worker") {
+    fill(39, 42, 48);
+    rect(x - 20, y + 10, 7, 14);
+  } else if (customer.visual === "student") {
+    fill(42, 52, 73);
+    rect(x - 20, y + 10, 7, 15);
+  }
+
+  fill(231, 196, 166);
+  rect(x - 10, y + 40, 20, 22);
+
+  fill(hair.r, hair.g, hair.b);
+  rect(x - 11, y + 57, 22, 7);
+  rect(x - 11, y + 50, 4, 10);
+
+  fill(35, 31, 31);
+  rect(x - 5, y + 51, 2, 2);
+  rect(x + 3, y + 51, 2, 2);
+
+  const isHappy = model.state === STATE.RESULT && model.total >= 18 && model.total <= BJ_TARGET;
+  if (isHappy) {
+    rect(x - 3, y + 45, 6, 2);
+  } else if (model.state === STATE.RESULT && model.total > BJ_TARGET) {
+    rect(x - 3, y + 46, 6, 2);
+  } else {
+    rect(x - 2, y + 45, 4, 1);
+  }
+
+  if (customer.visual === "student") {
+    noFill();
+    stroke(119, 139, 174);
+    strokeWidth(2);
+    rect(x - 14, y + 42, 28, 25);
+    noStroke();
   }
 }
 
-function drawDecisionButtons() {
-    rectMode(CORNER);
-    noStroke();
+// ==========================================
+// UI
+// ==========================================
+function drawGameUI() {
+  drawHeader();
+  drawDialogue();
+  drawPlatePanel();
+  drawHandPanel();
 
-    const buttons = getDecisionButtonRects();
-    const close = buttons.close;
-    const more = buttons.more;
-
-    const isRelationDecision =
-        model.activeRelationEvent &&
-        model.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI &&
-        model.activeRelationEvent.phase === "DECISION";
-
-    const potReady = model.hasPotIngredients();
-
-    fill(72, 51, 39);
-    rect(close.x, close.y, close.w, close.h);
-
-    fill(229, 216, 188);
-    rect(close.x + 3, close.y + 3, close.w - 6, close.h - 6);
-
-    fill(76, 51, 40);
-    textSize(11);
-    textAlign("center");
-
-    if (isRelationDecision) {
-        text("ここで会計にする", GAME_W / 2, textYFromTop(238));
-
-        fill(118, 91, 71);
-        textSize(7);
-        text(
-            "湯冷めしないうちに、宿へ戻す",
-            GAME_W / 2,
-            textYFromTop(249)
-        );
-    } else {
-        text("今日はここまで", GAME_W / 2, textYFromTop(238));
-
-        fill(118, 91, 71);
-        textSize(7);
-        text(
-            "今の一皿を、ここで確定する",
-            GAME_W / 2,
-            textYFromTop(249)
-        );
-    }
-
-    if (potReady) {
-        fill(111, 61, 43);
-        rect(more.x, more.y, more.w, more.h);
-
-        fill(206, 130, 77);
-        rect(more.x + 3, more.y + 3, more.w - 6, more.h - 6);
-
-        fill(255, 243, 217);
-        textSize(10);
-        text("鍋からもう一皿取る", GAME_W / 2, textYFromTop(289));
-
-        fill(255, 231, 194);
-        textSize(7);
-
-        if (isRelationDecision) {
-            text(
-                "売上は増える。二人の夜は少し長くなる",
-                GAME_W / 2,
-                textYFromTop(300)
-            );
-        } else {
-            text(
-                "残りの具から、もう一つ出す",
-                GAME_W / 2,
-                textYFromTop(300)
-            );
-        }
-    } else {
-        fill(67, 60, 52);
-        rect(more.x, more.y, more.w, more.h);
-
-        fill(93, 82, 67);
-        rect(more.x + 3, more.y + 3, more.w - 6, more.h - 6);
-
-        fill(214, 196, 163);
-        textSize(10);
-        text("鍋に残りがない", GAME_W / 2, textYFromTop(289));
-
-        fill(180, 161, 130);
-        textSize(7);
-        text(
-            "今夜は、この一皿で会計にする",
-            GAME_W / 2,
-            textYFromTop(300)
-        );
-    }
+  if (model.state === STATE.RESULT) {
+    drawTapToContinue();
+  }
 }
 
+function drawHeader() {
+  rectMode(CORNER);
+  noStroke();
 
+  fill(11, 14, 22, 242);
+  rect(0, 292, GAME_W, 28);
 
+  fill(95, 71, 56);
+  rect(0, 292, GAME_W, 2);
 
-function drawTapToNext() {
+  fill(241, 230, 203);
+  textSize(10);
+  textAlign("left");
+  text("今夜のおでん", 8, 303);
+
+  fill(182, 190, 204);
+  textSize(8);
+  textAlign("center");
+  text(`第${model.day}夜 ${model.currentIndex + 1}/${model.customers.length}人目`, GAME_W / 2, 303);
+
+  fill(241, 230, 203);
+  textSize(10);
+  textAlign("right");
+  text(`¥ ${model.sales}`, GAME_W - 8, 303);
+
+  fill(151, 160, 177);
+  textSize(8);
+  textAlign("left");
+  text(`ぴったり ${model.dailyExact} 残り ${model.totalStock()}品`, 8, 281);
+
+  textAlign("right");
+  text(model.night ? model.night.label : "横丁の夜", GAME_W - 8, 281);
+}
+
+function drawDialogue() {
+  if (!model.message || model.state === STATE.SUMMARY) return;
+
+  fill(17, 21, 29, 238);
+  rect(9, 132, 162, 41);
+  fill(95, 71, 56);
+  rect(9, 132, 162, 3);
+
+  let speaker = model.currentCustomer ? model.currentCustomer.name : "店主";
+  if (model.state === STATE.RESULT && model.total === 0) speaker = "店主";
+
+  fill(239, 218, 185);
+  textSize(9);
+  textAlign("left");
+  text(speaker, 17, 160);
+
+  fill(211, 214, 219);
+  textSize(9);
+  drawSplitText(model.message, 17, 143, 18, 10);
+}
+
+function drawPlatePanel() {
+  const total = model.total;
+  const served = model.served;
+
+  fill(17, 21, 29, 238);
+  rect(9, 104, 162, 24);
+  fill(95, 71, 56);
+  rect(9, 125, 162, 2);
+
+  fill(239, 218, 185);
+  textSize(8);
+  textAlign("left");
+  text(`小皿 ${total} / ${BJ_TARGET}`, 16, 117);
+
+  const barX = 75;
+  const barY = 114;
+  const barW = 82;
+  const barH = 6;
+
+  fill(61, 64, 69);
+  rect(barX, barY, barW, barH);
+
+  const safe = Math.min(total, BJ_TARGET);
+  const fillW = (safe / BJ_TARGET) * barW;
+
+  if (total > BJ_TARGET) fill(170, 65, 52);
+  else if (total === BJ_TARGET) fill(221, 180, 86);
+  else fill(181, 130, 72);
+
+  rect(barX, barY, fillW, barH);
+
+  if (total > BJ_TARGET) {
+    fill(241, 204, 184);
+    textSize(6);
+    textAlign("right");
+    text("食べすぎ", 164, 117);
+  } else if (total === BJ_TARGET) {
+    fill(255, 236, 183);
+    textSize(6);
+    textAlign("right");
+    text("ぴったり", 164, 117);
+  }
+
+  let x = 16;
+  for (let i = 0; i < served.length && i < 5; i++) {
+    const dish = served[i].dish;
+    fill(224, 211, 184);
+    rect(x, 106, 27, 6);
+    drawPixelArt(x + 1, 107, ART[dish.visual], 1);
+    fill(72, 49, 37);
+    textSize(5);
+    textAlign("right");
+    text(`+${dish.value}`, x + 25, 107);
+    x += 30;
+  }
+
+  if (served.length === 0) {
+    fill(196, 200, 205);
+    textSize(6);
+    textAlign("left");
+    text("まだ、小皿は空いている", 16, 107);
+  } else if (served.length > 5) {
+    fill(196, 200, 205);
+    textSize(6);
+    textAlign("right");
+    text(`+${served.length - 5}`, 165, 107);
+  }
+}
+
+function drawHandPanel() {
+  fill(54, 58, 62);
+  rect(7, 4, 166, 97);
+  fill(102, 106, 108);
+  rect(10, 7, 160, 91);
+  fill(53, 49, 43);
+  rect(13, 10, 154, 85);
+  fill(199, 142, 66);
+  rect(16, 13, 148, 79);
+  fill(238, 188, 101, 22);
+  rect(16, 13, 148, 79);
+
+  fill(245, 231, 202);
+  textSize(8);
+  textAlign("left");
+  text("仕込み台", 18, 84);
+
+  fill(231, 213, 175);
+  textSize(6);
+  textAlign("right");
+  text("出せる具を選ぶ", 162, 84);
+
+  for (let i = 0; i < HAND_SIZE; i++) {
+    drawHandCard(i);
+  }
+
+  const family = model.familyCounts();
+  fill(73, 49, 36);
+  textSize(7);
+  textAlign("left");
+  text(`鍋の残り ${model.potDeck.length}品`, 18, 74);
+
+  fill(119, 83, 53);
+  textSize(6);
+  text(`軽 ${family.light} しみる ${family.warm} 景気 ${family.feast}`, 18, 66);
+
+  drawActions();
+}
+
+function drawHandCard(index) {
+  const slot = handSlotRect(index);
+  const dish = model.handDish(index);
+
+  fill(73, 66, 57);
+  rect(slot.x - 1, slot.y - 1, slot.w + 2, slot.h + 2);
+
+  if (!dish) {
+    fill(106, 89, 64);
+    rect(slot.x, slot.y, slot.w, slot.h);
+
+    fill(232, 203, 143, 110);
+    textSize(7);
+    textAlign("center");
+    text("空き", slot.x + slot.w / 2, slot.y + 12);
+    return;
+  }
+
+  fill(224, 169, 85);
+  rect(slot.x, slot.y, slot.w, slot.h);
+  fill(255, 224, 157, 34);
+  rect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4);
+
+  drawPixelArt(slot.x + 4, slot.y + 11, ART[dish.visual], 2);
+
+  fill(74, 49, 36);
+  textSize(7);
+  textAlign("left");
+  text(dish.name, slot.x + 20, slot.y + 18);
+
+  fill(126, 63, 45);
+  textSize(7);
+  textAlign("right");
+  text(`+${dish.value}`, slot.x + slot.w - 4, slot.y + 7);
+
+  fill(107, 72, 48);
+  textSize(5);
+  textAlign("right");
+  text(`¥${dish.price}`, slot.x + slot.w - 4, slot.y + 14);
+}
+
+function drawActions() {
+  if (model.state !== STATE.SERVE) {
+    fill(119, 83, 53);
+    textSize(6);
+    textAlign("center");
+    text(model.state === STATE.RESULT ? "客の返事を待つ" : "", GAME_W / 2, 13);
+    return;
+  }
+
+  if (model.served.length > 0) {
+    const stand = standRect();
+    fill(72, 51, 39);
+    rect(stand.x, stand.y, stand.w, stand.h);
+    fill(229, 216, 188);
+    rect(stand.x + 2, stand.y + 2, stand.w - 4, stand.h - 4);
+    fill(76, 51, 40);
+    textSize(8);
+    textAlign("center");
+    text("会計にする", stand.x + stand.w / 2, 13);
+  }
+
+  const first = model.served.length === 0;
+  const gamble = gambleRect(first);
+  const enabled = model.potDeck.length > 0;
+
+  fill(enabled ? 111 : 83, enabled ? 61 : 63, enabled ? 43 : 50);
+  rect(gamble.x, gamble.y, gamble.w, gamble.h);
+
+  fill(enabled ? 206 : 133, enabled ? 130 : 105, enabled ? 77 : 76);
+  rect(gamble.x + 2, gamble.y + 2, gamble.w - 4, gamble.h - 4);
+
+  fill(255, 243, 217);
+  textSize(first ? 8 : 7);
+  textAlign("center");
+  text(enabled ? (first ? "鍋から直接すくう ?" : "鍋から賭ける ?") : "鍋が空", gamble.x + gamble.w / 2, 13);
+}
+
+function drawTapToContinue() {
   fill(245, 231, 203, 150 + Math.sin(ElapsedTime * 5) * 45);
   textSize(9);
   textAlign("center");
   text("タップして続ける ›", GAME_W / 2, 20);
 }
 
+// ==========================================
+// Title / summary
+// ==========================================
 function drawTitle() {
-    rectMode(CORNER);
-    noStroke();
+  rectMode(CORNER);
+  noStroke();
 
-    fill(18, 22, 33);
-    rect(0, 0, GAME_W, GAME_H);
+  fill(18, 22, 33);
+  rect(0, 0, GAME_W, GAME_H);
 
-    fill(28, 34, 47);
-    rect(0, 190, GAME_W, 130);
+  fill(28, 34, 47);
+  rect(0, 190, GAME_W, 130);
 
-    fill(37, 43, 57);
-    rect(0, 197, 34, 78);
-    rect(42, 197, 28, 96);
-    rect(79, 197, 36, 70);
-    rect(124, 197, 25, 93);
-    rect(156, 197, 24, 72);
+  fill(37, 43, 57);
+  rect(0, 197, 34, 78);
+  rect(42, 197, 28, 96);
+  rect(79, 197, 36, 70);
+  rect(124, 197, 25, 93);
+  rect(156, 197, 24, 72);
 
-    fill(27, 29, 38);
-    rect(0, 0, GAME_W, 191);
+  fill(27, 29, 38);
+  rect(0, 0, GAME_W, 191);
 
-    fill(48, 34, 32);
-    rect(27, 101, 126, 66);
+  fill(48, 34, 32);
+  rect(27, 101, 126, 66);
+  fill(68, 45, 39);
+  rect(31, 105, 118, 58);
+  fill(122, 57, 47);
+  rect(35, 123, 47, 30);
+  rect(84, 123, 47, 30);
 
-    fill(68, 45, 39);
-    rect(31, 105, 118, 58);
+  fill(55, 58, 66);
+  rect(30, 166, 121, 29);
+  fill(207, 150, 71);
+  rect(34, 170, 113, 17);
 
-    fill(122, 57, 47);
-    rect(35, 123, 47, 30);
-    rect(84, 123, 47, 30);
+  drawPixelArt(48, 172, ART.daikon, 2);
+  drawPixelArt(83, 172, ART.egg, 2);
+  drawPixelArt(117, 172, ART.ganmo, 2);
 
-    fill(55, 58, 66);
-    rect(30, 166, 121, 29);
+  const swing = Math.sin(ElapsedTime * 1.7) * 3;
+  pushMatrix();
+  translate(151, 207);
+  rotate(swing);
+  rectMode(CENTER);
 
-    fill(207, 150, 71);
-    rect(34, 170, 113, 17);
+  fill(122, 48, 43);
+  rect(0, 0, 25, 38);
+  fill(190, 70, 59);
+  rect(0, 0, 18, 32);
+  fill(240, 220, 180);
+  textSize(8);
+  textAlign("center");
+  text("おでん", 0, -3);
 
-    drawPixelArt(48, 172, ART.daikon, 2);
-    drawPixelArt(83, 172, ART.egg, 2);
-    drawPixelArt(117, 172, ART.ganmo, 2);
+  popMatrix();
+  rectMode(CORNER);
 
-    const swing = Math.sin(ElapsedTime * 1.7) * 3;
+  fill(245, 233, 207);
+  textSize(24);
+  textAlign("center");
+  text("今夜のおでん", GAME_W / 2, 252);
 
-    pushMatrix();
-    translate(151, 207);
-    rotate(swing);
+  fill(189, 194, 204);
+  textSize(9);
+  text("客の胃袋は、みんな21。", GAME_W / 2, 234);
+  text("手元の具を出すか、鍋に賭けるか。", GAME_W / 2, 220);
 
-    rectMode(CENTER);
-
-    fill(122, 48, 43);
-    rect(0, 0, 25, 38);
-
-    fill(190, 70, 59);
-    rect(0, 0, 18, 32);
-
-    fill(240, 220, 180);
-    textSize(8);
-    textAlign("center");
-    text("おでん", 0, -3);
-
-    popMatrix();
-
-    rectMode(CORNER);
-
-    fill(245, 233, 207);
-    textSize(24);
-    textAlign("center");
-    text("今夜のおでん", GAME_W / 2, 252);
-
-    textSize(9);
-    fill(189, 194, 204);
-    text("一品で帰すか、もう一品すすめるか。", GAME_W / 2, 234);
-
-    // 屋台の直後へ寄せ、画面下の空白を少し整える
-    fill(245, 233, 207, 150 + Math.sin(ElapsedTime * 5) * 90);
-    textSize(9);
-    text("タップして、のれんを出す", GAME_W / 2, 58);
+  fill(245, 233, 207, 150 + Math.sin(ElapsedTime * 5) * 90);
+  textSize(9);
+  text("タップして、のれんを出す", GAME_W / 2, 58);
 }
-
 
 function drawSummary() {
-    rectMode(CORNER);
-    noStroke();
+  rectMode(CORNER);
+  noStroke();
 
-    fill(7, 10, 16, 204);
-    rect(0, 0, GAME_W, GAME_H);
+  fill(7, 10, 16, 204);
+  rect(0, 0, GAME_W, GAME_H);
 
-    fill(67, 47, 38);
-    rect(13, 27, 154, 260);
+  fill(67, 47, 38);
+  rect(13, 27, 154, 260);
+  fill(234, 220, 190);
+  rect(16, 30, 148, 254);
+  fill(246, 237, 214);
+  rect(20, 34, 140, 246);
 
-    fill(234, 220, 190);
-    rect(16, 30, 148, 254);
+  fill(76, 52, 40);
+  textSize(14);
+  textAlign("center");
+  text(`第${model.day}夜のしめ`, GAME_W / 2, 255);
 
-    fill(246, 237, 214);
-    rect(20, 34, 140, 246);
+  fill(127, 82, 57);
+  textSize(8);
+  text(model.night ? model.night.label : "", GAME_W / 2, 239);
 
-    fill(76, 52, 40);
-    textSize(14);
-    textAlign("center");
-    text(`第${model.day}夜のしめ`, GAME_W / 2, 255);
+  fill(76, 52, 40);
+  textSize(10);
+  textAlign("left");
+  text(`今夜の売上: ¥${model.sales}`, 34, 218);
+  text(`累計売上: ¥${model.totalSales}`, 34, 201);
+  text(`21ぴったり: ${model.dailyExact}人`, 34, 184);
+  text(`残った具: ${model.totalStock()}品`, 34, 167);
 
-    fill(127, 82, 57);
-    textSize(8);
-    text(model.night ? model.night.label : "", GAME_W / 2, 239);
+  fill(127, 82, 57);
+  textSize(10);
+  drawSplitText(model.dayClosingLine, 34, 123, 15, 13);
 
-    fill(76, 52, 40);
-    textSize(10);
-    textAlign("left");
-    text(`今夜の売上： ¥${model.sales}`, 34, 218);
-    text(`累計売上： ¥${model.totalSales}`, 34, 201);
-    text(`21ぴったり： ${model.todayExact21 || 0}人`, 34, 184);
-    text(`残った具： ${model.getBlackjackTotalStock()}品`, 34, 167);
+  fill(103, 74, 57);
+  textSize(8);
+  drawSplitText(model.tomorrowHint, 34, 77, 17, 10);
 
-    fill(127, 82, 57);
-    textSize(10);
-    drawSplitText(model.dayClosingLine || "", 34, 123, 15, 13);
+  const next = nextDayRect();
+  fill(116, 61, 43);
+  rect(next.x, next.y, next.w, next.h);
 
-    fill(103, 74, 57);
-    textSize(8);
-    drawSplitText(model.tomorrowHint || "", 34, 77, 17, 10);
-
-    fill(116, 61, 43);
-    rect(33, 40, 114, 28);
-
-    fill(255, 241, 214);
-    textAlign("center");
-    textSize(9);
-    text("明日のれんを出す", GAME_W / 2, 50);
+  fill(255, 241, 214);
+  textAlign("center");
+  textSize(9);
+  text("明日のれんを出す", GAME_W / 2, 50);
 }
 
+// ==========================================
+// Generic drawing helpers
+// ==========================================
+function drawPixelArt(px, py, dataArray, size) {
+  if (!dataArray) return;
 
+  noStroke();
+  for (let r = 0; r < dataArray.length; r++) {
+    const row = dataArray[r];
 
-const previousBeginDayForPot = GameModel.prototype.beginDay;
-const previousNextCustomerForPot = GameModel.prototype.nextCustomer;
+    for (let c = 0; c < row.length; c++) {
+      const colorData = PALETTE[row[c]];
+      if (!colorData) continue;
 
-function getPotSlotRect(index) {
-    const col = index % 2;
-    const row = Math.floor(index / 2);
-
-    return {
-        x: 10 + col * 82,
-        y: 78 - row * 32,
-        w: 78,
-        h: 29
-    };
+      fill(colorData.r, colorData.g, colorData.b);
+      rect(px + c * size, py + (dataArray.length - 1 - r) * size, size, size);
+    }
+  }
 }
 
-function getPotDishArt(item) {
-    if (!item) return null;
-    return ART[item.visual];
+function drawSplitText(str, x, y, maxLen, lineHeight) {
+  const lines = [];
+  const rawLines = String(str || "").split("\n");
+
+  for (const raw of rawLines) {
+    let line = "";
+    for (let i = 0; i < raw.length; i++) {
+      line += raw[i];
+      if (line.length >= maxLen) {
+        lines.push(line);
+        line = "";
+      }
+    }
+    if (line.length > 0) lines.push(line);
+  }
+
+  textAlign("left");
+  let cy = y;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    text(lines[i], x, cy);
+    cy += lineHeight;
+  }
 }
-
-const HAND21_SIZE = 3;
-
-function hand21SlotRect(index) {
-    return {
-        x: 10 + index * 54,
-        y: 31,
-        w: 52,
-        h: 32
-    };
-}
-
-function hand21StandRect() {
-    return { x: 10, y: 7, w: 76, h: 18 };
-}
-
-function hand21GambleRect() {
-    return { x: 94, y: 7, w: 76, h: 18 };
-}
-
-function hand21FirstGambleRect() {
-    return { x: 30, y: 7, w: 120, h: 18 };
-}
-
-function hand21CountFamilies(deck) {
-    const result = {
-        light: 0,
-        warm: 0,
-        heavy: 0
-    };
-
-    for (const dish of deck || []) {
-        const value = bjValueOf(dish);
-
-        if (value <= 4) {
-            result.light++;
-        } else if (value <= 7) {
-            result.warm++;
-        } else {
-            result.heavy++;
-        }
-    }
-
-    return result;
-}
-
-GameModel.prototype.getBlackjackTotalStock = function() {
-    const deckCount = this.bjDeck ? this.bjDeck.length : 0;
-
-    const handCount = (this.bjHand || []).filter(dish => {
-        return dish !== null && dish !== undefined;
-    }).length;
-
-    return deckCount + handCount;
-};
-
-GameModel.prototype.resetBlackjackCustomer = function() {
-    this.bjServed = [];
-    this.bjTotal = 0;
-    this.bjResolved = false;
-};
-
-GameModel.prototype.prepareBlackjackCustomer = function() {
-    this.resetBlackjackCustomer();
-};
-
-GameModel.prototype.clearBlackjackHand = function() {
-    this.bjHand = [null, null, null];
-};
-
-GameModel.prototype.refillBlackjackHand = function() {
-    if (!Array.isArray(this.bjHand)) {
-        this.clearBlackjackHand();
-    }
-
-    while (this.bjHand.length < HAND21_SIZE) {
-        this.bjHand.push(null);
-    }
-
-    for (let i = 0; i < HAND21_SIZE; i++) {
-        if (this.bjHand[i]) continue;
-
-        const dish = this.drawFromBlackjackPot();
-
-        if (!dish) break;
-
-        this.bjHand[i] = dish;
-    }
-};
-
-GameModel.prototype.getBlackjackHandDish = function(slotIndex) {
-    if (!this.bjHand) return null;
-    return this.bjHand[slotIndex] || null;
-};
-
-GameModel.prototype.serveBlackjackDish = function(dish, source) {
-    if (!dish || this.bjResolved) return;
-
-    if (!Array.isArray(this.bjServed)) {
-        this.bjServed = [];
-    }
-
-    this.bjServed.push({
-        dish: dish,
-        source: source || "HAND"
-    });
-
-    this.bjTotal += bjValueOf(dish);
-    this.recordBlackjackSale(dish);
-
-    if (this.bjTotal >= BJ_TARGET) {
-        this.finishBlackjackCustomer();
-        return;
-    }
-
-    this.message =
-        `${dish.name}を、小皿によそった。\n` +
-        `いま ${this.bjTotal} / ${BJ_TARGET}。どうする？`;
-
-    this.state = STATE.SECOND_DECISION;
-};
-
-GameModel.prototype.serveFromBlackjackHand = function(slotIndex) {
-    const dish = this.getBlackjackHandDish(slotIndex);
-
-    if (!dish) return;
-
-    this.bjHand[slotIndex] = null;
-    this.serveBlackjackDish(dish, "HAND");
-};
-
-GameModel.prototype.hitBlackjack = function() {
-    const dish = this.drawFromBlackjackPot();
-
-    if (!dish) {
-        this.finishBlackjackCustomer();
-        return;
-    }
-
-    this.serveBlackjackDish(dish, "POT");
-};
-
-GameModel.prototype.standBlackjack = function() {
-    this.finishBlackjackCustomer();
-};
-
-GameModel.prototype.startBlackjackDay = function() {
-    this.sales = 0;
-    this.satisfaction = 0;
-    this.soldCounts = {};
-
-    this.currentIndex = 0;
-    this.currentCustomer = null;
-    this.options = [];
-    this.secondOptions = [];
-    this.message = "";
-    this.canSecond = false;
-
-    // 相関イベントは一旦停止。
-    // まず「手元の3品」と「21」の手触りだけを見る。
-    this.activeRelationEvent = null;
-    this.relationEventToday = null;
-    this.eventGuest = null;
-    this.skipCustomerIds = {};
-    this.eventLog = "";
-
-    this.todayExact21 = 0;
-
-    if (typeof this.pickNightContext === "function") {
-        this.night = this.pickNightContext();
-    } else {
-        this.night = null;
-    }
-
-    this.customers = [...CUSTOMERS_DB]
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 4);
-
-    this.buildBlackjackPot();
-
-    this.clearBlackjackHand();
-    this.refillBlackjackHand();
-    this.resetBlackjackCustomer();
-};
-
-GameModel.prototype.startBlackjackRun = function() {
-    this.reset();
-
-    this.day = 1;
-    this.totalSales = 0;
-    this.exact21Count = 0;
-    this.todayExact21 = 0;
-
-    this.bjDeck = [];
-    this.clearBlackjackHand();
-    this.resetBlackjackCustomer();
-
-    this.startBlackjackDay();
-    this.nextBlackjackCustomer();
-};
-
-GameModel.prototype.beginNextBlackjackDay = function() {
-    this.day += 1;
-    this.startBlackjackDay();
-    this.nextBlackjackCustomer();
-};
-
-GameModel.prototype.nextBlackjackCustomer = function() {
-    if (this.currentIndex >= this.customers.length) {
-        this.finishBlackjackDay();
-        return;
-    }
-
-    if (this.getBlackjackTotalStock() <= 0) {
-        this.message =
-            "鍋も仕込み台も、きれいに空になった。\n" +
-            "今夜は少し早めに、のれんをしまう。";
-
-        this.finishBlackjackDay();
-        return;
-    }
-
-    this.currentCustomer = this.customers[this.currentIndex];
-    this.prepareBlackjackCustomer();
-
-    this.message = this.currentCustomer.line;
-    this.state = STATE.ARRIVAL;
-    this.animT = 0;
-    this.customerX = GAME_W + 50;
-};
-
-GameModel.prototype.finishBlackjackCustomer = function() {
-    const customer = this.currentCustomer;
-    const total = this.bjTotal;
-
-    this.bjResolved = true;
-
-    if (total > BJ_TARGET) {
-        this.satisfaction -= 2;
-
-        this.message =
-            `${customer.name}は箸を置いた。\n` +
-            `「${total}は、ちょっと食べすぎたかも」`;
-    } else if (total === BJ_TARGET) {
-        this.satisfaction += 3;
-        this.todayExact21 += 1;
-        this.exact21Count = (this.exact21Count || 0) + 1;
-
-        this.message =
-            `${customer.name}は、小さく笑った。\n` +
-            "「ちょうど、ここまでがよかったです」";
-    } else if (total >= 18) {
-        this.satisfaction += 2;
-
-        this.message =
-            `${customer.name}は湯気を見つめた。\n` +
-            "「うん、ちょうど満たされました」";
-    } else if (total >= 14) {
-        this.satisfaction += 1;
-
-        this.message =
-            `${customer.name}は、ゆっくり席を立った。\n` +
-            "「あったまりました。ごちそうさま」";
-    } else {
-        this.satisfaction -= 1;
-
-        this.message =
-            `${customer.name}は少し迷ってから立ち上がった。\n` +
-            "「おいしかったです。でも、もう少しいけたかも」";
-    }
-
-    this.state = STATE.SECOND_RESULT;
-};
-
-GameModel.prototype.finishBlackjackDay = function() {
-    if (this.todayExact21 >= 2) {
-        this.dayClosingLine =
-            "今夜は、ちょうどいい湯気が\n" +
-            "何度も横丁に残った。";
-    } else if (this.todayExact21 === 1) {
-        this.dayClosingLine =
-            "一人ぶんの「ちょうど」が、\n" +
-            "提灯の下に残っている。";
-    } else if (this.satisfaction <= -3) {
-        this.dayClosingLine =
-            "今夜は少し、よそいすぎた。\n" +
-            "鍋の湯気だけが、まだ元気だ。";
-    } else if (this.sales >= 1000) {
-        this.dayClosingLine =
-            "よく売れた夜だった。\n" +
-            "鍋の底が、ゆっくり見えている。";
-    } else {
-        this.dayClosingLine =
-            "今夜の鍋は、\n" +
-            "静かにだしを残している。";
-    }
-
-    this.tomorrowHint =
-        `鍋と仕込み台の残り：${this.getBlackjackTotalStock()}品\n` +
-        "明日も、何がちょうどになるかは分からない。";
-
-    this.state = STATE.SUMMARY;
-};
-
-function drawBlackjackStatusPanel() {
-    const total = model.bjTotal || 0;
-    const served = model.bjServed || [];
-
-    rectMode(CORNER);
-    noStroke();
-
-    fill(17, 21, 29, 238);
-    rect(9, 104, 162, 24);
-
-    fill(95, 71, 56);
-    rect(9, 125, 162, 2);
-
-    fill(239, 218, 185);
-    textSize(8);
-    textAlign("left");
-    text(`小皿　${total} / ${BJ_TARGET}`, 16, 117);
-
-    const barX = 75;
-    const barY = 114;
-    const barW = 82;
-    const barH = 6;
-
-    fill(61, 64, 69);
-    rect(barX, barY, barW, barH);
-
-    const safeTotal = Math.min(total, BJ_TARGET);
-    const fillW = (safeTotal / BJ_TARGET) * barW;
-
-    if (total > BJ_TARGET) {
-        fill(170, 65, 52);
-    } else if (total === BJ_TARGET) {
-        fill(221, 180, 86);
-    } else {
-        fill(181, 130, 72);
-    }
-
-    rect(barX, barY, fillW, barH);
-
-    if (total > BJ_TARGET) {
-        fill(241, 204, 184);
-        textSize(6);
-        textAlign("right");
-        text("食べすぎ", 164, 117);
-    } else if (total === BJ_TARGET) {
-        fill(255, 236, 183);
-        textSize(6);
-        textAlign("right");
-        text("ぴったり", 164, 117);
-    }
-
-    let chipX = 16;
-
-    for (let i = 0; i < served.length && i < 5; i++) {
-        const entry = served[i];
-        const dish = entry.dish;
-
-        fill(224, 211, 184);
-        rect(chipX, 106, 27, 6);
-
-        drawPixelArt(chipX + 1, 107, ART[dish.visual], 1);
-
-        fill(72, 49, 37);
-        textSize(5);
-        textAlign("right");
-        text(`+${bjValueOf(dish)}`, chipX + 25, 107);
-
-        chipX += 30;
-    }
-
-    if (served.length === 0) {
-        fill(196, 200, 205);
-        textSize(6);
-        textAlign("left");
-        text("まだ、小皿は空いている", 16, 107);
-    } else if (served.length > 5) {
-        fill(196, 200, 205);
-        textSize(6);
-        textAlign("right");
-        text(`+${served.length - 5}`, 165, 107);
-    }
-}
-
-function drawBlackjackPot(mode) {
-    rectMode(CORNER);
-    noStroke();
-
-    fill(54, 58, 62);
-    rect(7, 4, 166, 97);
-
-    fill(102, 106, 108);
-    rect(10, 7, 160, 91);
-
-    fill(53, 49, 43);
-    rect(13, 10, 154, 85);
-
-    fill(199, 142, 66);
-    rect(16, 13, 148, 79);
-
-    fill(238, 188, 101, 22);
-    rect(16, 13, 148, 79);
-
-    fill(245, 231, 202);
-    textSize(8);
-    textAlign("left");
-    text("仕込み台", 18, 84);
-
-    fill(231, 213, 175);
-    textSize(6);
-    textAlign("right");
-    text("出せる具を選ぶ", 162, 84);
-
-    for (let i = 0; i < HAND21_SIZE; i++) {
-        const slot = hand21SlotRect(i);
-        const dish = model.getBlackjackHandDish(i);
-
-        fill(73, 66, 57);
-        rect(slot.x - 1, slot.y - 1, slot.w + 2, slot.h + 2);
-
-        if (!dish) {
-            fill(106, 89, 64);
-            rect(slot.x, slot.y, slot.w, slot.h);
-
-            fill(232, 203, 143, 110);
-            textSize(7);
-            textAlign("center");
-            text("空き", slot.x + slot.w / 2, slot.y + 12);
-            continue;
-        }
-
-        fill(224, 169, 85);
-        rect(slot.x, slot.y, slot.w, slot.h);
-
-        fill(255, 224, 157, 34);
-        rect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4);
-
-        drawPixelArt(slot.x + 4, slot.y + 11, ART[dish.visual], 2);
-
-        fill(74, 49, 36);
-        textSize(7);
-        textAlign("left");
-        text(dish.name, slot.x + 20, slot.y + 18);
-
-        fill(126, 63, 45);
-        textSize(7);
-        textAlign("right");
-        text(`+${bjValueOf(dish)}`, slot.x + slot.w - 4, slot.y + 7);
-
-        fill(107, 72, 48);
-        textSize(5);
-        textAlign("right");
-        text(`¥${dish.price}`, slot.x + slot.w - 4, slot.y + 14);
-    }
-
-    const familyCounts = hand21CountFamilies(model.bjDeck || []);
-
-    fill(73, 49, 36);
-    textSize(7);
-    textAlign("left");
-    text(`鍋の残り ${model.getBlackjackPotRemaining()}品`, 18, 74);
-
-    fill(119, 83, 53);
-    textSize(6);
-    text(
-        `軽 ${familyCounts.light}　しみる ${familyCounts.warm}　景気 ${familyCounts.heavy}`,
-        18,
-        66
-    );
-
-    if (mode === "FIRST") {
-        const gamble = hand21FirstGambleRect();
-
-        fill(111, 61, 43);
-        rect(gamble.x, gamble.y, gamble.w, gamble.h);
-
-        fill(206, 130, 77);
-        rect(gamble.x + 2, gamble.y + 2, gamble.w - 4, gamble.h - 4);
-
-        fill(255, 243, 217);
-        textSize(8);
-        textAlign("center");
-        text("鍋から直接すくう　？", GAME_W / 2, 13);
-    } else if (mode === "DECISION") {
-        const stand = hand21StandRect();
-        const gamble = hand21GambleRect();
-
-        fill(72, 51, 39);
-        rect(stand.x, stand.y, stand.w, stand.h);
-
-        fill(229, 216, 188);
-        rect(stand.x + 2, stand.y + 2, stand.w - 4, stand.h - 4);
-
-        fill(76, 51, 40);
-        textSize(8);
-        textAlign("center");
-        text("会計にする", stand.x + stand.w / 2, 13);
-
-        fill(111, 61, 43);
-        rect(gamble.x, gamble.y, gamble.w, gamble.h);
-
-        fill(206, 130, 77);
-        rect(gamble.x + 2, gamble.y + 2, gamble.w - 4, gamble.h - 4);
-
-        fill(255, 243, 217);
-        textSize(7);
-        text("鍋から賭ける ?", gamble.x + gamble.w / 2, 13);
-    } else {
-        fill(119, 83, 53);
-        textSize(6);
-        textAlign("center");
-        text("客の返事を待つ", GAME_W / 2, 13);
-    }
-}
-
-
-const BJ_TARGET = 21;
-
-const BJ_VALUES = {
-    SHIRATAKI: 2,
-    KONNYAKU: 3,
-    CHIKUWA: 4,
-    EGG: 5,
-    DAIKON: 6,
-    GANMODOKI: 7,
-    MOCHI_POUCH: 9,
-    BEEF_TENDON: 10
-};
-
-const BJ_ORDER = [
-    "SHIRATAKI",
-    "KONNYAKU",
-    "CHIKUWA",
-    "EGG",
-    "DAIKON",
-    "GANMODOKI",
-    "MOCHI_POUCH",
-    "BEEF_TENDON"
-];
-
-function bjValueOf(dish) {
-    if (!dish) return 0;
-    return BJ_VALUES[dish.id] || 0;
-}
-
-function bjHitRect() {
-    return { x: 20, y: 8, w: 140, h: 18 };
-}
-
-function bjStandRect() {
-    return { x: 15, y: 8, w: 72, h: 18 };
-}
-
-function bjMoreRect() {
-    return { x: 93, y: 8, w: 72, h: 18 };
-}
-
-function bjPickFromIds(ids) {
-    const candidates = INGREDIENTS.filter(item => ids.includes(item.id));
-
-    if (candidates.length === 0) {
-        return INGREDIENTS[0];
-    }
-
-    return candidates[Math.floor(Math.random() * candidates.length)];
-}
-
-GameModel.prototype.buildBlackjackPot = function() {
-    const deck = [];
-
-    // 軽い具を4つ。早めに止める余地を残す。
-    for (let i = 0; i < 4; i++) {
-        deck.push(bjPickFromIds([
-            "SHIRATAKI",
-            "KONNYAKU",
-            "CHIKUWA"
-        ]));
-    }
-
-    // 中くらいの具を6つ。鍋の中心。
-    for (let i = 0; i < 6; i++) {
-        deck.push(bjPickFromIds([
-            "EGG",
-            "DAIKON",
-            "GANMODOKI"
-        ]));
-    }
-
-    // 重い具を3つ。21を狙う手にも、バーストの罠にもなる。
-    for (let i = 0; i < 3; i++) {
-        deck.push(bjPickFromIds([
-            "MOCHI_POUCH",
-            "BEEF_TENDON"
-        ]));
-    }
-
-    // 最後の3品は完全にランダム。
-    for (let i = 0; i < 3; i++) {
-        const index = Math.floor(Math.random() * INGREDIENTS.length);
-        deck.push(INGREDIENTS[index]);
-    }
-
-    this.bjDeck = deck;
-    this.bjPotDay = this.day;
-};
-
-GameModel.prototype.getBlackjackPotCounts = function() {
-    const counts = {};
-
-    for (const id of BJ_ORDER) {
-        counts[id] = 0;
-    }
-
-    for (const dish of this.bjDeck || []) {
-        if (!dish) continue;
-        counts[dish.id] = (counts[dish.id] || 0) + 1;
-    }
-
-    return counts;
-};
-
-GameModel.prototype.getBlackjackPotRemaining = function() {
-    return this.bjDeck ? this.bjDeck.length : 0;
-};
-
-GameModel.prototype.resetBlackjackHand = function() {
-    this.bjHand = [];
-    this.bjTotal = 0;
-    this.bjResolved = false;
-};
-
-GameModel.prototype.prepareBlackjackCustomer = function() {
-    this.resetBlackjackHand();
-};
-
-GameModel.prototype.startBlackjackDay = function() {
-    this.sales = 0;
-    this.satisfaction = 0;
-    this.soldCounts = {};
-
-    this.currentIndex = 0;
-    this.currentCustomer = null;
-    this.options = [];
-    this.secondOptions = [];
-    this.message = "";
-    this.canSecond = false;
-
-    // 今回は相関イベントを止め、まず鍋と21の感触だけを見る。
-    this.activeRelationEvent = null;
-    this.relationEventToday = null;
-    this.eventGuest = null;
-    this.skipCustomerIds = {};
-    this.eventLog = "";
-
-    this.todayExact21 = 0;
-
-    if (typeof this.pickNightContext === "function") {
-        this.night = this.pickNightContext();
-    } else {
-        this.night = null;
-    }
-
-    this.customers = [...CUSTOMERS_DB]
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 4);
-
-    this.buildBlackjackPot();
-};
-
-GameModel.prototype.startBlackjackRun = function() {
-    this.reset();
-
-    this.day = 1;
-    this.totalSales = 0;
-    this.exact21Count = 0;
-    this.todayExact21 = 0;
-
-    this.startBlackjackDay();
-    this.nextBlackjackCustomer();
-};
-
-GameModel.prototype.beginNextBlackjackDay = function() {
-    this.day += 1;
-    this.startBlackjackDay();
-    this.nextBlackjackCustomer();
-};
-
-GameModel.prototype.nextBlackjackCustomer = function() {
-    if (this.currentIndex >= this.customers.length) {
-        this.finishBlackjackDay();
-        return;
-    }
-
-    if (this.getBlackjackPotRemaining() === 0) {
-        this.message =
-            "鍋の具は、きれいになくなった。\n" +
-            "今夜は少し早めに、のれんをしまう。";
-
-        this.finishBlackjackDay();
-        return;
-    }
-
-    this.currentCustomer = this.customers[this.currentIndex];
-    this.prepareBlackjackCustomer();
-
-    this.message = this.currentCustomer.line;
-    this.state = STATE.ARRIVAL;
-    this.animT = 0;
-    this.customerX = GAME_W + 50;
-};
-
-GameModel.prototype.recordBlackjackSale = function(dish) {
-    this.sales += dish.price;
-    this.totalSales += dish.price;
-
-    this.soldCounts[dish.name] = (this.soldCounts[dish.name] || 0) + 1;
-};
-
-GameModel.prototype.drawFromBlackjackPot = function() {
-    if (!this.bjDeck || this.bjDeck.length === 0) {
-        return null;
-    }
-
-    const drawIndex = Math.floor(Math.random() * this.bjDeck.length);
-    const dish = this.bjDeck.splice(drawIndex, 1)[0];
-
-    return dish;
-};
-
-GameModel.prototype.finishBlackjackCustomer = function() {
-    const customer = this.currentCustomer;
-    const total = this.bjTotal;
-
-    this.bjResolved = true;
-
-    if (total > BJ_TARGET) {
-        this.satisfaction -= 2;
-        this.message =
-            `${customer.name}は箸を置いた。\n` +
-            "「おいしいけど……もう、入らないかも」";
-    } else if (total === BJ_TARGET) {
-        this.satisfaction += 3;
-        this.todayExact21 += 1;
-        this.exact21Count = (this.exact21Count || 0) + 1;
-
-        this.message =
-            `${customer.name}は、少しだけ笑った。\n` +
-            "「ちょうど、ここまでがよかったです」";
-    } else if (total >= 18) {
-        this.satisfaction += 2;
-        this.message =
-            `${customer.name}は湯気を見つめた。\n` +
-            "「うん、ちょうど満たされました」";
-    } else if (total >= 14) {
-        this.satisfaction += 1;
-        this.message =
-            `${customer.name}は、ゆっくり席を立った。\n` +
-            "「あったまりました。ごちそうさま」";
-    } else {
-        this.satisfaction -= 1;
-        this.message =
-            `${customer.name}は少し迷ってから立ち上がった。\n` +
-            "「おいしかったです。でも、もう少しいけたかも」";
-    }
-
-    this.state = STATE.SECOND_RESULT;
-};
-
-GameModel.prototype.hitBlackjack = function() {
-    const dish = this.drawFromBlackjackPot();
-
-    if (!dish) {
-        this.finishBlackjackCustomer();
-        return;
-    }
-
-    this.bjHand.push(dish);
-    this.bjTotal += bjValueOf(dish);
-
-    this.recordBlackjackSale(dish);
-
-    if (this.bjTotal >= BJ_TARGET) {
-        this.finishBlackjackCustomer();
-        return;
-    }
-
-    this.message =
-        `${dish.name}を、そっとよそった。\n` +
-        `いま ${this.bjTotal} / ${BJ_TARGET}。どうする？`;
-
-    this.state = STATE.SECOND_DECISION;
-};
-
-GameModel.prototype.standBlackjack = function() {
-    this.finishBlackjackCustomer();
-};
-
-GameModel.prototype.finishBlackjackDay = function() {
-    if (this.todayExact21 >= 2) {
-        this.dayClosingLine =
-            "今夜は、ちょうどいい湯気が\n" +
-            "何度も横丁に残った。";
-    } else if (this.todayExact21 === 1) {
-        this.dayClosingLine =
-            "一人ぶんの「ちょうど」が、\n" +
-            "提灯の下に残っている。";
-    } else if (this.satisfaction <= -3) {
-        this.dayClosingLine =
-            "今夜は少し、よそいすぎた。\n" +
-            "鍋の湯気だけが、まだ元気だ。";
-    } else if (this.sales >= 1000) {
-        this.dayClosingLine =
-            "よく売れた夜だった。\n" +
-            "鍋の底が、ゆっくり見えている。";
-    } else {
-        this.dayClosingLine =
-            "今夜の鍋は、\n" +
-            "静かにだしを残している。";
-    }
-
-    this.tomorrowHint =
-        `鍋の残り：${this.getBlackjackPotRemaining()}品\n` +
-        "明日も、何がちょうどになるかは分からない。";
-
-    this.state = STATE.SUMMARY;
-};
-
-function drawBlackjackStatusPanel() {
-    const total = model.bjTotal || 0;
-    const hand = model.bjHand || [];
-
-    rectMode(CORNER);
-    noStroke();
-
-    fill(17, 21, 29, 238);
-    rect(9, 105, 162, 22);
-
-    fill(95, 71, 56);
-    rect(9, 125, 162, 2);
-
-    fill(239, 218, 185);
-    textSize(8);
-    textAlign("left");
-    text(`お腹 ${total} / ${BJ_TARGET}`, 16, 116);
-
-    const barX = 76;
-    const barY = 113;
-    const barW = 82;
-    const barH = 6;
-
-    fill(65, 67, 71);
-    rect(barX, barY, barW, barH);
-
-    const safeTotal = Math.min(total, BJ_TARGET);
-    const fillW = (safeTotal / BJ_TARGET) * barW;
-
-    if (total > BJ_TARGET) {
-        fill(166, 66, 52);
-    } else if (total === BJ_TARGET) {
-        fill(217, 177, 84);
-    } else {
-        fill(183, 131, 72);
-    }
-
-    rect(barX, barY, fillW, barH);
-
-    fill(198, 202, 208);
-    textSize(6);
-    textAlign("left");
-
-    const names = hand.map(dish => dish.name).join("・");
-
-    if (names.length > 0) {
-        text(names, 16, 108);
-    } else {
-        text("まだ、小皿は空いている", 16, 108);
-    }
-}
-
-function drawBlackjackPot(mode) {
-    rectMode(CORNER);
-    noStroke();
-
-    fill(54, 58, 62);
-    rect(7, 5, 166, 97);
-
-    fill(102, 106, 108);
-    rect(10, 8, 160, 91);
-
-    fill(53, 49, 43);
-    rect(13, 11, 154, 85);
-
-    fill(199, 142, 66);
-    rect(16, 14, 148, 79);
-
-    fill(238, 188, 101, 22);
-    rect(16, 14, 148, 79);
-
-    fill(245, 231, 202);
-    textSize(8);
-    textAlign("left");
-    text(`鍋の残り　${model.getBlackjackPotRemaining()}品`, 18, 85);
-
-    const counts = model.getBlackjackPotCounts();
-    const visible = [];
-
-    for (const id of BJ_ORDER) {
-        if (counts[id] > 0) {
-            const dish = INGREDIENTS.find(item => item.id === id);
-
-            if (dish) {
-                visible.push({
-                    dish: dish,
-                    count: counts[id]
-                });
-            }
-        }
-    }
-
-    for (let i = 0; i < visible.length; i++) {
-        const entry = visible[i];
-        const col = i % 2;
-        const row = Math.floor(i / 2);
-
-        const x = 21 + col * 73;
-        const y = 68 - row * 17;
-
-        drawPixelArt(x, y - 3, ART[entry.dish.visual], 1);
-
-        fill(73, 49, 36);
-        textSize(7);
-        textAlign("left");
-        text(entry.dish.name, x + 12, y);
-
-        fill(126, 63, 45);
-        textAlign("right");
-        text(`${bjValueOf(entry.dish)} ×${entry.count}`, x + 65, y);
-    }
-
-    if (mode === "HIT") {
-        const hit = bjHitRect();
-
-        fill(112, 61, 43);
-        rect(hit.x, hit.y, hit.w, hit.h);
-
-        fill(206, 130, 77);
-        rect(hit.x + 2, hit.y + 2, hit.w - 4, hit.h - 4);
-
-        fill(255, 243, 217);
-        textSize(9);
-        textAlign("center");
-        text("鍋から一品すくう", GAME_W / 2, 14);
-    } else if (mode === "DECISION") {
-        const stand = bjStandRect();
-        const more = bjMoreRect();
-
-        fill(72, 51, 39);
-        rect(stand.x, stand.y, stand.w, stand.h);
-
-        fill(229, 216, 188);
-        rect(stand.x + 2, stand.y + 2, stand.w - 4, stand.h - 4);
-
-        fill(76, 51, 40);
-        textSize(8);
-        textAlign("center");
-        text("会計にする", stand.x + stand.w / 2, 14);
-
-        fill(111, 61, 43);
-        rect(more.x, more.y, more.w, more.h);
-
-        fill(206, 130, 77);
-        rect(more.x + 2, more.y + 2, more.w - 4, more.h - 4);
-
-        fill(255, 243, 217);
-        textSize(8);
-        text("もう一品", more.x + more.w / 2, 14);
-    }
-}
-
-
-function pickPotIngredientByFamily(familyIds) {
-    const candidates = INGREDIENTS.filter(item => {
-        return familyIds.includes(item.id);
-    });
-
-    if (candidates.length === 0) {
-        return INGREDIENTS[0];
-    }
-
-    return candidates[Math.floor(Math.random() * candidates.length)];
-}
-
-GameModel.prototype.buildPotForDay = function() {
-    const pot = [];
-
-    // 毎晩の最低限の逃げ道。
-    // 軽い・しみる・景気を一つずつ保証する。
-    pot.push(pickPotIngredientByFamily([
-        "CHIKUWA",
-        "KONNYAKU",
-        "SHIRATAKI"
-    ]));
-
-    pot.push(pickPotIngredientByFamily([
-        "DAIKON",
-        "EGG",
-        "GANMODOKI"
-    ]));
-
-    pot.push(pickPotIngredientByFamily([
-        "BEEF_TENDON",
-        "MOCHI_POUCH"
-    ]));
-
-    // 残り3枠は重複あり。
-    // 鍋の偏りを作り、温存の判断を生む。
-    for (let i = 0; i < 3; i++) {
-        const randomIndex = Math.floor(Math.random() * INGREDIENTS.length);
-        pot.push(INGREDIENTS[randomIndex]);
-    }
-
-    this.potSlots = pot.sort(() => Math.random() - 0.5);
-    this.potDay = this.day;
-
-    // 野々村さんとユキさんの夜だけは、
-    // 二人連れの選択肢がちゃんと鍋に現れるようにする。
-    const isNomuraYukiEvent =
-        this.relationEventToday &&
-        this.relationEventToday.id === RELATION_EVENT_IDS.NOMURA_YUKI;
-
-    if (!isNomuraYukiEvent) {
-        return;
-    }
-
-    const requiredIds = [
-        "GANMODOKI",
-        "DAIKON",
-        "BEEF_TENDON"
-    ];
-
-    for (const requiredId of requiredIds) {
-        const alreadyExists = this.potSlots.some(item => {
-            return item && item.id === requiredId;
-        });
-
-        if (alreadyExists) {
-            continue;
-        }
-
-        const replacement = INGREDIENTS.find(item => {
-            return item.id === requiredId;
-        });
-
-        if (!replacement) {
-            continue;
-        }
-
-        const protectedIds = requiredIds.filter(id => {
-            return this.potSlots.some(item => item && item.id === id);
-        });
-
-        let replaceIndex = this.potSlots.findIndex(item => {
-            return item && !protectedIds.includes(item.id);
-        });
-
-        if (replaceIndex < 0) {
-            replaceIndex = this.potSlots.findIndex(item => item !== null);
-        }
-
-        if (replaceIndex >= 0) {
-            this.potSlots[replaceIndex] = replacement;
-        }
-    }
-};
-
-GameModel.prototype.refillPotForCurrentDay = function() {
-    this.buildPotForDay();
-};
-
-GameModel.prototype.ensurePotForCurrentDay = function() {
-    const potIsMissing =
-        !Array.isArray(this.potSlots) ||
-        this.potSlots.length !== 6;
-
-    const potIsFromAnotherDay =
-        this.potDay !== this.day;
-
-    if (potIsMissing || potIsFromAnotherDay) {
-        this.refillPotForCurrentDay();
-    }
-};
-
-
-const POT_FAMILIES = {
-    LIGHT: ["CHIKUWA", "KONNYAKU", "SHIRATAKI"],
-    WARM: ["DAIKON", "EGG", "GANMODOKI"],
-    FEAST: ["BEEF_TENDON", "MOCHI_POUCH"]
-};
-
-const CUSTOMER_HINTS = {
-    SAEKI: {
-        mark: "◷",
-        label: "時計の影"
-    },
-    MINATO: {
-        mark: "￥",
-        label: "財布の影"
-    },
-    TOYAMA: {
-        mark: "♪",
-        label: "祝杯の気配"
-    },
-    NONOMURA: {
-        mark: "宿",
-        label: "宿の羽織"
-    },
-    YUKI: {
-        mark: "♨",
-        label: "湯上がり"
-    },
-    KOTA: {
-        mark: "雨",
-        label: "濡れた鞄"
-    }
-};
-
-function pickIngredientFromIds(ids) {
-    const candidates = INGREDIENTS.filter(item => ids.includes(item.id));
-
-    if (candidates.length === 0) {
-        return INGREDIENTS[0];
-    }
-
-    return candidates[Math.floor(Math.random() * candidates.length)];
-}
-
-function getIngredientFamily(item) {
-    if (!item) return "LIGHT";
-
-    if (POT_FAMILIES.LIGHT.includes(item.id)) return "LIGHT";
-    if (POT_FAMILIES.WARM.includes(item.id)) return "WARM";
-    if (POT_FAMILIES.FEAST.includes(item.id)) return "FEAST";
-
-    return "LIGHT";
-}
-
-function getIngredientFamilyLabel(item) {
-    const family = getIngredientFamily(item);
-
-    if (family === "WARM") return "しみる";
-    if (family === "FEAST") return "景気";
-
-    return "軽い";
-}
-
-function getIngredientFamilyColor(item) {
-    const family = getIngredientFamily(item);
-
-    if (family === "WARM") {
-        return { r: 126, g: 78, b: 48 };
-    }
-
-    if (family === "FEAST") {
-        return { r: 117, g: 55, b: 48 };
-    }
-
-    return { r: 78, g: 91, b: 99 };
-}
-
-GameModel.prototype.getUpcomingCustomerHints = function(count) {
-    const hints = [];
-    const skipIds = this.skipCustomerIds || {};
-
-    for (
-        let i = this.currentIndex + 1;
-        i < this.customers.length && hints.length < count;
-        i++
-    ) {
-        const customer = this.customers[i];
-
-        if (!customer) continue;
-        if (skipIds[customer.id]) continue;
-
-        if (
-            this.eventGuest &&
-            customer.id === this.eventGuest.id
-        ) {
-            continue;
-        }
-
-        const hint = CUSTOMER_HINTS[customer.id];
-
-        if (hint) {
-            hints.push(hint);
-        }
-    }
-
-    return hints;
-};
-
-function drawUpcomingHints() {
-    if (
-        model.state === STATE.TITLE ||
-        model.state === STATE.SUMMARY ||
-        !model.currentCustomer
-    ) {
-        return;
-    }
-
-    const hints = model.getUpcomingCustomerHints(2);
-
-    if (hints.length === 0) return;
-
-    rectMode(CORNER);
-    noStroke();
-
-    fill(14, 18, 26, 218);
-    rect(9, 260, 162, 17);
-
-    fill(94, 71, 56);
-    rect(9, 275, 162, 2);
-
-    fill(187, 175, 151);
-    textSize(7);
-    textAlign("left");
-    text("次の気配", 15, 266);
-
-    let cursorX = 52;
-
-    for (let i = 0; i < hints.length; i++) {
-        const hint = hints[i];
-
-        fill(238, 219, 184);
-        textSize(7);
-        textAlign("left");
-        text(`${hint.mark} ${hint.label}`, cursorX, 266);
-
-        cursorX += i === 0 ? 59 : 0;
-
-        if (i === 0 && hints.length > 1) {
-            fill(105, 110, 118);
-            text("|", 106, 266);
-            cursorX = 114;
-        }
-    }
-}
-
-
-GameModel.prototype.buildPotForDay = function() {
-    const shuffled = [...INGREDIENTS].sort(() => Math.random() - 0.5);
-
-    this.potSlots = shuffled.slice(0, 6);
-
-    if (
-        this.relationEventToday &&
-        this.relationEventToday.id === RELATION_EVENT_IDS.NOMURA_YUKI
-    ) {
-        this.ensurePotContains([
-            "GANMODOKI",
-            "DAIKON",
-            "BEEF_TENDON"
-        ]);
-    }
-};
-
-GameModel.prototype.ensurePotContains = function(requiredIds) {
-    if (!this.potSlots) {
-        this.potSlots = [];
-    }
-
-    for (const ingredientId of requiredIds) {
-        const alreadyExists = this.potSlots.some(item => {
-            return item && item.id === ingredientId;
-        });
-
-        if (alreadyExists) continue;
-
-        const requiredNow = requiredIds.filter(id => {
-            return this.potSlots.some(item => item && item.id === id);
-        });
-
-        let replaceIndex = this.potSlots.findIndex(item => {
-            return item && !requiredNow.includes(item.id);
-        });
-
-        if (replaceIndex === -1) {
-            replaceIndex = this.potSlots.findIndex(item => item !== null);
-        }
-
-        const replacement = findIngredientById(ingredientId);
-
-        if (replaceIndex >= 0 && replacement) {
-            this.potSlots[replaceIndex] = replacement;
-        }
-    }
-};
-
-GameModel.prototype.hasPotIngredients = function() {
-    if (!this.potSlots) return false;
-
-    return this.potSlots.some(item => item !== null);
-};
-
-GameModel.prototype.getCurrentServedDishes = function() {
-    if (
-        this.servedForDay !== this.day ||
-        this.servedForIndex !== this.currentIndex
-    ) {
-        return [];
-    }
-
-    return this.currentServedDishes || [];
-};
-
-GameModel.prototype.resetCurrentServing = function() {
-    this.currentServedDishes = [];
-    this.servedForDay = this.day;
-    this.servedForIndex = this.currentIndex;
-};
-
-GameModel.prototype.takePotIngredient = function(slotIndex) {
-    if (!this.potSlots) return null;
-
-    const dish = this.potSlots[slotIndex];
-
-    if (!dish) return null;
-
-    this.potSlots[slotIndex] = null;
-
-    if (
-        this.servedForDay !== this.day ||
-        this.servedForIndex !== this.currentIndex
-    ) {
-        this.resetCurrentServing();
-    }
-
-    this.currentServedDishes.push(dish);
-
-    return dish;
-};
-
-GameModel.prototype.beginDay = function() {
-    previousBeginDayForPot.call(this);
-    this.buildPotForDay();
-};
-
-GameModel.prototype.nextCustomer = function() {
-    previousNextCustomerForPot.call(this);
-
-    if (this.state !== STATE.ARRIVAL || !this.currentCustomer) return;
-
-    this.resetCurrentServing();
-
-    if (
-        this.activeRelationEvent &&
-        this.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI
-    ) {
-        this.ensurePotContains([
-            "GANMODOKI",
-            "DAIKON",
-            "BEEF_TENDON"
-        ]);
-    }
-};
-
-GameModel.prototype.resolveFirstFromPot = function(dish) {
-    const customer = this.currentCustomer;
-
-    if (customer.idealFirst.includes(dish.id)) {
-        this.recordSale(dish);
-        this.satisfaction += 3;
-        this.adjustTrust(customer, 2);
-
-        this.message = customer.successLine;
-        this.state = STATE.FIRST_RESULT;
-        this.canSecond = true;
-        return;
-    }
-
-    if (customer.badFirst.includes(dish.id)) {
-        this.satisfaction -= 1;
-        this.adjustTrust(customer, -2);
-
-        this.message = customer.missLine;
-        this.state = STATE.FIRST_RESULT;
-        this.canSecond = false;
-        return;
-    }
-
-    this.recordSale(dish);
-    this.satisfaction += 1;
-    this.adjustTrust(customer, 1);
-
-    this.message = customer.okayLine;
-    this.state = STATE.FIRST_RESULT;
-    this.canSecond = true;
-};
-
-GameModel.prototype.resolveSecondFromPot = function(dish) {
-    const customer = this.currentCustomer;
-
-    this.recordSale(dish);
-
-    if (customer.goodSecond.includes(dish.id)) {
-        this.satisfaction += 2;
-        this.adjustTrust(customer, 1);
-
-        this.message = "お代わり、ありがとうね。";
-    } else if (customer.badSecond.includes(dish.id)) {
-        this.satisfaction -= 2;
-        this.adjustTrust(customer, -2);
-
-        this.message = customer.oversoldLine;
-    } else {
-        this.message = "はいよ、お待ちどうさま。";
-    }
-
-    this.state = STATE.SECOND_RESULT;
-};
-
-GameModel.prototype.resolveRelationEventFirstFromPot = function(dish) {
-    const event = this.activeRelationEvent;
-
-    if (!event) return;
-
-    event.firstDishId = dish.id;
-
-    this.recordSale(dish);
-
-    const warmDishIds = ["GANMODOKI", "DAIKON"];
-    const heavyDishIds = ["BEEF_TENDON", "MOCHI_POUCH"];
-
-    if (warmDishIds.includes(dish.id)) {
-        this.satisfaction += 3;
-        this.adjustShopFlow("onsen", 2);
-
-        event.phase = "DECISION";
-        this.canSecond = true;
-
-        this.message =
-            "野々村さんが笑った。\n" +
-            "「これなら、宿に戻る前にちょうどいいね」";
-    } else if (heavyDishIds.includes(dish.id)) {
-        this.satisfaction -= 1;
-        this.adjustShopFlow("onsen", -1);
-
-        event.phase = "RESOLVED";
-        this.canSecond = false;
-
-        this.storyFlags.nomuraYukiOutcome = "HEAVY";
-        this.eventLog =
-            "湯上がりの二人は、少し早く席を立った。";
-
-        this.message =
-            "ユキさんが、小さく笑った。\n" +
-            "「おいしそう。でも、湯上がりには少し重いかも」";
-    } else {
-        this.satisfaction += 1;
-        this.adjustShopFlow("onsen", 1);
-
-        event.phase = "DECISION";
-        this.canSecond = true;
-
-        this.message =
-            "ユキさんが、湯気を見つめている。\n" +
-            "「町の夜って、こういう感じなんですね」";
-    }
-
-    this.state = STATE.FIRST_RESULT;
-};
-
-GameModel.prototype.resolveRelationEventSecondFromPot = function(dish) {
-    const event = this.activeRelationEvent;
-
-    if (!event) return;
-
-    this.recordSale(dish);
-
-    const gentleDishIds = [
-        "DAIKON",
-        "GANMODOKI",
-        "EGG",
-        "CHIKUWA"
-    ];
-
-    const heavyDishIds = [
-        "BEEF_TENDON",
-        "MOCHI_POUCH"
-    ];
-
-    event.finalChoice = dish.id;
-    event.phase = "RESOLVED";
-
-    if (gentleDishIds.includes(dish.id)) {
-        this.satisfaction += 1;
-        this.adjustShopFlow("onsen", 1);
-
-        this.storyFlags.nomuraYukiOutcome = "WARM";
-        this.eventLog =
-            "湯上がりの灯が、少し増えた。";
-
-        this.message =
-            "もう一皿は、二人でゆっくり分けられた。\n" +
-            "宿へ戻る道にも、まだ湯気が残っている。";
-    } else if (heavyDishIds.includes(dish.id)) {
-        this.satisfaction -= 2;
-        this.adjustShopFlow("onsen", -2);
-
-        this.storyFlags.nomuraYukiOutcome = "LATE";
-        this.eventLog =
-            "売上は増えたが、湯上がりの灯は少し揺れた。";
-
-        this.message =
-            "皿はきれいに空になった。\n" +
-            "ただ、宿へ戻る足取りは少しだけ急いでいた。";
-    } else {
-        this.satisfaction += 0;
-        this.adjustShopFlow("onsen", 0);
-
-        this.storyFlags.nomuraYukiOutcome = "QUIET";
-        this.eventLog =
-            "二人の会話は、提灯の下で少しだけ続いた。";
-
-        this.message =
-            "野々村さんが湯気の向こうでうなずいた。\n" +
-            "ユキさんは、店の名前を小さく読んでいた。";
-    }
-
-    this.state = STATE.SECOND_RESULT;
-};
-
-GameModel.prototype.resolvePotFirstDish = function(slotIndex) {
-    const dish = this.takePotIngredient(slotIndex);
-
-    if (!dish) return;
-
-    if (
-        this.activeRelationEvent &&
-        this.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI
-    ) {
-        this.resolveRelationEventFirstFromPot(dish);
-        return;
-    }
-
-    this.resolveFirstFromPot(dish);
-};
-
-GameModel.prototype.resolvePotSecondDish = function(slotIndex) {
-    const dish = this.takePotIngredient(slotIndex);
-
-    if (!dish) return;
-
-    if (
-        this.activeRelationEvent &&
-        this.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI &&
-        this.activeRelationEvent.phase === "POT_SECOND"
-    ) {
-        this.resolveRelationEventSecondFromPot(dish);
-        return;
-    }
-
-    this.resolveSecondFromPot(dish);
-};
-
-function drawPotHand(isSecondDish) {
-    rectMode(CORNER);
-    noStroke();
-
-    fill(54, 58, 62);
-    rect(7, 5, 166, 122);
-
-    fill(102, 106, 108);
-    rect(10, 8, 160, 116);
-
-    fill(53, 49, 43);
-    rect(13, 11, 154, 110);
-
-    fill(199, 142, 66);
-    rect(16, 14, 148, 95);
-
-    fill(238, 188, 101, 22);
-    rect(16, 14, 148, 95);
-
-    const remainingCount = model.potSlots
-        ? model.potSlots.filter(item => item !== null).length
-        : 0;
-
-    fill(245, 231, 202);
-    textSize(9);
-    textAlign("left");
-    text(`鍋の中　残り ${remainingCount}`, 17, 113);
-
-    fill(231, 213, 175);
-    textSize(7);
-    textAlign("right");
-    text(
-        isSecondDish ? "もう一皿を取る" : "一皿目を取る",
-        163,
-        114
-    );
-
-    for (let i = 0; i < 6; i++) {
-        const slot = getPotSlotRect(i);
-        const item = model.potSlots ? model.potSlots[i] : null;
-
-        fill(72, 67, 59);
-        rect(slot.x - 1, slot.y - 1, slot.w + 2, slot.h + 2);
-
-        if (!item) {
-            fill(93, 77, 56);
-            rect(slot.x, slot.y, slot.w, slot.h);
-
-            fill(229, 200, 143, 95);
-            textSize(7);
-            textAlign("center");
-            text("売切", slot.x + slot.w / 2, slot.y + 11);
-            continue;
-        }
-
-        fill(214, 157, 75);
-        rect(slot.x, slot.y, slot.w, slot.h);
-
-        fill(255, 220, 149, 32);
-        rect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4);
-
-        const familyColor = getIngredientFamilyColor(item);
-
-        fill(familyColor.r, familyColor.g, familyColor.b, 210);
-        rect(slot.x + 3, slot.y + slot.h - 8, 20, 5);
-
-        fill(255, 243, 217);
-        textSize(5);
-        textAlign("center");
-        text(
-            getIngredientFamilyLabel(item),
-            slot.x + 13,
-            slot.y + slot.h - 7
-        );
-
-        drawPixelArt(
-            slot.x + 7,
-            slot.y + 7,
-            getPotDishArt(item),
-            2
-        );
-
-        fill(73, 49, 36);
-        textSize(8);
-        textAlign("left");
-        text(item.name, slot.x + 28, slot.y + 15);
-
-        fill(126, 63, 45);
-        textSize(7);
-        textAlign("right");
-        text(`¥${item.price}`, slot.x + slot.w - 5, slot.y + 5);
-    }
-}
-
-
-GameModel.prototype.refillPotForCurrentDay = function() {
-    const shuffled = [...INGREDIENTS].sort(() => Math.random() - 0.5);
-
-    this.potSlots = shuffled.slice(0, 6);
-    this.potDay = this.day;
-
-    if (
-        this.relationEventToday &&
-        this.relationEventToday.id === RELATION_EVENT_IDS.NOMURA_YUKI
-    ) {
-        this.ensurePotContains([
-            "GANMODOKI",
-            "DAIKON",
-            "BEEF_TENDON"
-        ]);
-    }
-};
-
-GameModel.prototype.ensurePotForCurrentDay = function() {
-    const isMissingPot =
-        !Array.isArray(this.potSlots) ||
-        this.potSlots.length !== 6;
-
-    const isOldPot =
-        this.potDay !== this.day;
-
-    if (isMissingPot || isOldPot) {
-        this.refillPotForCurrentDay();
-    }
-};
-
-const startNewRunForPotSafety = GameModel.prototype.startNewRun;
-
-GameModel.prototype.startNewRun = function() {
-    startNewRunForPotSafety.call(this);
-
-    // reset後は day が1に戻るため、前周回の鍋を絶対に持ち越さない
-    this.refillPotForCurrentDay();
-};
-
-const beginNextDayForPotSafety = GameModel.prototype.beginNextDay;
-
-GameModel.prototype.beginNextDay = function() {
-    beginNextDayForPotSafety.call(this);
-
-    // beginDay のパッチ順に関係なく、翌日の鍋を必ず作る
-    this.refillPotForCurrentDay();
-};
-
-
-function drawServedTray() {
-    const dishes = model.getCurrentServedDishes();
-
-    if (!dishes || dishes.length === 0) return;
-
-    rectMode(CORNER);
-    noStroke();
-
-    fill(32, 35, 42, 240);
-    rect(10, 105, 160, 22);
-
-    fill(95, 71, 56);
-    rect(10, 105, 160, 2);
-
-    fill(235, 216, 181);
-    textSize(7);
-    textAlign("left");
-    text("小皿", 17, 113);
-
-    for (let i = 0; i < dishes.length; i++) {
-        const dish = dishes[i];
-        const x = 48 + i * 56;
-
-        fill(224, 212, 185);
-        rect(x, 108, 48, 13);
-
-        drawPixelArt(x + 4, 110, ART[dish.visual], 1);
-
-        fill(71, 49, 37);
-        textSize(7);
-        textAlign("left");
-        text(dish.name, x + 17, 112);
-    }
-}
-
-
-const RELATION_EVENT_IDS = {
-    NOMURA_YUKI: "NOMURA_YUKI"
-};
-
-function findCustomerById(customerId) {
-    return CUSTOMERS_DB.find(customer => customer.id === customerId);
-}
-
-function findIngredientById(ingredientId) {
-    return INGREDIENTS.find(ingredient => ingredient.id === ingredientId);
-}
-
-GameModel.prototype.reset = function() {
-    this.state = STATE.TITLE;
-
-    this.day = 1;
-    this.sales = 0;
-    this.totalSales = 0;
-    this.satisfaction = 0;
-    this.regulars = 0;
-    this.shopWarmth = 0;
-
-    this.soldCounts = {};
-    this.customerMemory = {};
-
-    this.customers = [];
-    this.currentIndex = 0;
-    this.currentCustomer = null;
-
-    this.options = [];
-    this.secondOptions = [];
-    this.message = "";
-
-    this.animT = 0;
-    this.customerX = GAME_W + 50;
-    this.canSecond = false;
-
-    this.night = null;
-    this.pendingNight = null;
-    this.lastNightId = "";
-
-    this.dayClosingLine = "";
-    this.tomorrowHint = "";
-
-    this.shopFlow = {
-        station: 0,
-        onsen: 0,
-        banquet: 0,
-        shelter: 0
-    };
-
-    this.storyFlags = {
-        nomuraYukiSeen: false,
-        nomuraYukiOutcome: ""
-    };
-
-    this.relationEventToday = null;
-    this.activeRelationEvent = null;
-    this.eventGuest = null;
-    this.skipCustomerIds = {};
-    this.eventLog = "";
-};
-
-GameModel.prototype.adjustShopFlow = function(flowId, amount) {
-    if (this.shopFlow[flowId] === undefined) {
-        this.shopFlow[flowId] = 0;
-    }
-
-    this.shopFlow[flowId] = clampValue(
-        this.shopFlow[flowId] + amount,
-        -8,
-        12
-    );
-};
-
-GameModel.prototype.prepareRelationEvent = function() {
-    if (this.storyFlags.nomuraYukiSeen) return;
-    if (this.day < 2) return;
-
-    const shouldAppear = this.day >= 4 || Math.random() < 0.55;
-
-    if (!shouldAppear) return;
-
-    const nomura = findCustomerById("NONOMURA");
-    const yuki = findCustomerById("YUKI");
-
-    if (!nomura || !yuki) return;
-
-    const others = [];
-
-    for (const customer of this.customers) {
-        if (customer.id !== "NONOMURA" && customer.id !== "YUKI") {
-            others.push(customer);
-        }
-    }
-
-    for (const customer of CUSTOMERS_DB) {
-        const alreadyAdded = others.some(other => other.id === customer.id);
-
-        if (
-            customer.id !== "NONOMURA" &&
-            customer.id !== "YUKI" &&
-            !alreadyAdded &&
-            others.length < 2
-        ) {
-            others.push(customer);
-        }
-    }
-
-    this.customers = [
-        nomura,
-        yuki,
-        ...others.slice(0, 2)
-    ];
-
-    this.relationEventToday = {
-        id: RELATION_EVENT_IDS.NOMURA_YUKI,
-        started: false,
-        completed: false,
-        phase: "INTRO",
-        firstDishId: "",
-        finalChoice: ""
-    };
-};
-
-GameModel.prototype.beginDay = function() {
-    this.sales = 0;
-    this.satisfaction = 0;
-    this.soldCounts = {};
-
-    this.currentIndex = 0;
-    this.currentCustomer = null;
-    this.options = [];
-    this.secondOptions = [];
-    this.message = "";
-    this.canSecond = false;
-
-    this.activeRelationEvent = null;
-    this.relationEventToday = null;
-    this.eventGuest = null;
-    this.skipCustomerIds = {};
-    this.eventLog = "";
-
-    this.night = this.pendingNight || this.pickNightContext();
-    this.pendingNight = null;
-
-    this.customers = this.createDailyCustomerList();
-    this.prepareRelationEvent();
-
-    this.regulars = this.getRegularCount();
-};
-
-GameModel.prototype.nextCustomer = function() {
-    while (
-        this.currentIndex < this.customers.length &&
-        this.skipCustomerIds[this.customers[this.currentIndex].id]
-    ) {
-        this.currentIndex++;
-    }
-
-    if (this.currentIndex >= this.customers.length) {
-        this.finishDay();
-        return;
-    }
-
-    if (
-        this.activeRelationEvent &&
-        this.activeRelationEvent.completed
-    ) {
-        this.activeRelationEvent = null;
-        this.eventGuest = null;
-    }
-
-    this.currentCustomer = this.customers[this.currentIndex];
-
-    const memory = this.getCustomerMemory(this.currentCustomer.id);
-
-    memory.visits += 1;
-    memory.lastVisitDay = this.day;
-
-    const isNomuraYukiEvent =
-        this.relationEventToday &&
-        !this.relationEventToday.started &&
-        this.relationEventToday.id === RELATION_EVENT_IDS.NOMURA_YUKI &&
-        this.currentCustomer.id === "NONOMURA";
-
-    if (isNomuraYukiEvent) {
-        this.relationEventToday.started = true;
-        this.storyFlags.nomuraYukiSeen = true;
-
-        this.activeRelationEvent = this.relationEventToday;
-        this.eventGuest = findCustomerById("YUKI");
-        this.skipCustomerIds.YUKI = true;
-
-        this.message =
-            "こちら、ユキさん。宿のお客さんでね。\n" +
-            "湯上がりに、二人でつつけるものを。";
-    } else {
-        this.message = this.getArrivalLine(this.currentCustomer);
-    }
-
-    this.state = STATE.ARRIVAL;
-    this.animT = 0;
-    this.customerX = GAME_W + 50;
-};
-
-GameModel.prototype.createFirstOptions = function() {
-    if (
-        this.activeRelationEvent &&
-        this.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI
-    ) {
-        const ganmo = findIngredientById("GANMODOKI");
-        const daikon = findIngredientById("DAIKON");
-        const beef = findIngredientById("BEEF_TENDON");
-
-        this.options = [ganmo, daikon, beef]
-            .filter(Boolean)
-            .sort(() => Math.random() - 0.5);
-
-        return;
-    }
-
-    const customer = this.currentCustomer;
-
-    let ideal = INGREDIENTS.filter(item =>
-        customer.idealFirst.includes(item.id)
-    );
-
-    let okay = INGREDIENTS.filter(item =>
-        customer.okayFirst.includes(item.id)
-    );
-
-    let bad = INGREDIENTS.filter(item =>
-        customer.badFirst.includes(item.id)
-    );
-
-    if (ideal.length === 0) ideal = [INGREDIENTS[0]];
-    if (okay.length === 0) okay = [INGREDIENTS[1]];
-    if (bad.length === 0) bad = [INGREDIENTS[2]];
-
-    const pickRandom = array => {
-        return array[Math.floor(Math.random() * array.length)];
-    };
-
-    this.options = [
-        pickRandom(ideal),
-        pickRandom(okay),
-        pickRandom(bad)
-    ].sort(() => Math.random() - 0.5);
-};
-
-GameModel.prototype.resolveRelationEventFirst = function(idx) {
-    const dish = this.options[idx];
-    const event = this.activeRelationEvent;
-
-    if (!dish || !event) return;
-
-    event.firstDishId = dish.id;
-
-    this.recordSale(dish);
-
-    if (dish.id === "GANMODOKI") {
-        this.satisfaction += 3;
-        this.adjustShopFlow("onsen", 2);
-
-        event.phase = "DECISION";
-        this.canSecond = true;
-
-        this.message =
-            "野々村さんが笑った。\n" +
-            "「これなら、宿に戻る前にちょうどいいね」";
-    } else if (dish.id === "DAIKON") {
-        this.satisfaction += 1;
-        this.adjustShopFlow("onsen", 1);
-
-        event.phase = "DECISION";
-        this.canSecond = true;
-
-        this.message =
-            "ユキさんが、湯気を見つめている。\n" +
-            "「やさしいですね。町の夜って感じがします」";
-    } else {
-        this.satisfaction -= 1;
-        this.adjustShopFlow("onsen", -1);
-
-        event.phase = "RESOLVED";
-        this.canSecond = false;
-
-        this.storyFlags.nomuraYukiOutcome = "HEAVY";
-        this.eventLog =
-            "湯上がりの二人は、少し早く席を立った。";
-
-        this.message =
-            "ユキさんが、小さく笑った。\n" +
-            "「おいしそう。でも、湯上がりには少し重いかも」";
-    }
-
-    this.state = STATE.FIRST_RESULT;
-};
-
-GameModel.prototype.resolveFirst = function(idx) {
-    if (
-        this.activeRelationEvent &&
-        this.activeRelationEvent.id === RELATION_EVENT_IDS.NOMURA_YUKI
-    ) {
-        this.resolveRelationEventFirst(idx);
-        return;
-    }
-
-    const dish = this.options[idx];
-    const customer = this.currentCustomer;
-
-    if (customer.idealFirst.includes(dish.id)) {
-        this.recordSale(dish);
-        this.satisfaction += 3;
-        this.adjustTrust(customer, 2);
-
-        this.message = customer.successLine;
-        this.state = STATE.FIRST_RESULT;
-        this.canSecond = true;
-    } else if (customer.okayFirst.includes(dish.id)) {
-        this.recordSale(dish);
-        this.satisfaction += 1;
-        this.adjustTrust(customer, 1);
-
-        this.message = customer.okayLine;
-        this.state = STATE.FIRST_RESULT;
-        this.canSecond = true;
-    } else {
-        this.satisfaction -= 1;
-        this.adjustTrust(customer, -2);
-
-        this.message = customer.missLine;
-        this.state = STATE.FIRST_RESULT;
-        this.canSecond = false;
-    }
-};
-
-GameModel.prototype.resolveRelationEventDecision = function(choice) {
-    const event = this.activeRelationEvent;
-
-    if (!event) return;
-
-    event.finalChoice = choice;
-    event.phase = "RESOLVED";
-
-    if (choice === "CLOSE") {
-        this.satisfaction += 1;
-        this.adjustShopFlow("onsen", 2);
-
-        this.storyFlags.nomuraYukiOutcome = "WARM";
-        this.eventLog =
-            "湯上がりの灯が、少し増えた。";
-
-        this.message =
-            "野々村さんは、湯気の向こうでうなずいた。\n" +
-            "ユキさんは、提灯を一度だけ振り返った。";
-    } else {
-        const extraPrice = 160;
-
-        this.sales += extraPrice;
-        this.totalSales += extraPrice;
-        this.soldCounts["小皿"] = (this.soldCounts["小皿"] || 0) + 1;
-
-        this.satisfaction -= 1;
-        this.adjustShopFlow("onsen", -1);
-
-        this.storyFlags.nomuraYukiOutcome = "LATE";
-        this.eventLog =
-            "売上は増えたが、湯上がりの灯は少し揺れた。";
-
-        this.message =
-            "もう一皿は、きれいに空になった。\n" +
-            "ただ、宿へ戻る足取りは少しだけ急いでいた。";
-    }
-
-    this.state = STATE.SECOND_RESULT;
-};
-
-GameModel.prototype.depart = function() {
-    if (this.activeRelationEvent) {
-        this.activeRelationEvent.completed = true;
-    }
-
-    this.state = STATE.DEPARTURE;
-    this.animT = 0;
-};
-
-GameModel.prototype.finishDay = function() {
-    this.pendingNight = this.pickNightContext();
-
-    this.dayClosingLine = this.eventLog || this.buildDayClosingLine();
-    this.tomorrowHint =
-        `明日の気配：${this.pendingNight.label}\n` +
-        this.pendingNight.forecast;
-
-    this.state = STATE.SUMMARY;
-};
-
-function drawRelationGuest(customer, x, y) {
-    if (!customer) return;
-
-    fill(10, 13, 19, 90);
-    rectMode(CORNER);
-    rect(x - 16, y, 32, 4);
-
-    fill(84, 108, 126);
-    rect(x - 13, y + 3, 26, 35);
-
-    fill(211, 180, 128);
-    rect(x - 5, y + 34, 10, 8);
-
-    fill(231, 196, 166);
-    rect(x - 9, y + 39, 18, 21);
-
-    fill(108, 78, 50);
-    rect(x - 10, y + 56, 20, 7);
-    rect(x - 10, y + 49, 4, 10);
-
-    fill(35, 31, 31);
-    rect(x - 5, y + 50, 2, 2);
-    rect(x + 3, y + 50, 2, 2);
-    rect(x - 2, y + 44, 4, 1);
-
-    fill(126, 83, 48);
-    rect(x + 10, y + 10, 7, 14);
-
-    fill(215, 192, 148);
-    rect(x + 11, y + 17, 5, 4);
-}
-
-
-
