@@ -932,25 +932,35 @@ function drawMessage() {
   rectMode(CORNER);
   noStroke();
 
-  fill(14, 18, 27, 235);
-  rect(9, 127, 162, 40);
+  const boxX = 9;
+  const boxY = 121;
+  const boxW = 162;
+  const boxH = 27;
+
+  fill(14, 18, 27, 238);
+  rect(boxX, boxY, boxW, boxH);
+
   fill(95, 69, 54);
-  rect(9, 164, 162, 3);
+  rect(boxX, boxY + boxH - 3, boxW, 3);
 
   let speaker = "あなた";
+
   if (model.state === STATE.RIVALS_TURN) {
-    speaker = model.rivalPhase === 0 ? LEFT_RIVAL.name : RIGHT_RIVAL.name;
+    speaker = model.rivalPhase === 0
+      ? LEFT_RIVAL.name
+      : RIGHT_RIVAL.name;
   }
 
   fill(240, 221, 185);
-  textSize(9);
+  textSize(8);
   textAlign("left");
-  text(speaker, 17, 154);
+  text(speaker, boxX + 8, boxY + boxH - 10);
 
   fill(211, 215, 219);
-  textSize(8);
-  drawSplitText(model.message, 17, 137, 19, 10);
+  textSize(7);
+  drawSplitText(model.message, boxX + 8, boxY + 5, 20, 8);
 }
+
 
 function drawControls() {
   if (model.state !== STATE.PLAYER_TURN) return;
