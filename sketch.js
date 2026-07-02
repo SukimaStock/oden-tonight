@@ -1,13 +1,14 @@
 // ==========================================
-// 今夜のおでん:鍋を囲む
-// 共有鍋・待ち受けドラフトの試作版
+// コトコトおでん(仮)
+// 共有鍋・お椀容量つき試作版
 // Codea Lite / 完全差し替え用
 // ==========================================
 
 const GAME_W = 180;
 const GAME_H = 320;
-const POT_SIZE = 5;
-const TURNS_PER_NIGHT = 4;
+const POT_SIZE = 6;
+const BOWL_LIMIT = 10;
+const TURNS_PER_NIGHT = 5;
 
 const STATE = {
   TITLE: "TITLE",
@@ -27,6 +28,7 @@ const PALETTE = {
   "L": { r: 250, g: 230, b: 180 }, "l": { r: 220, g: 190, b: 140 },
   "C": { r: 230, g: 180, b: 100 }, "c": { r: 120, g: 70, b: 40 },
   "S": { r: 200, g: 220, b: 220 }, "s": { r: 160, g: 180, b: 180 },
+  "R": { r: 202, g: 91, b: 73 }, "r": { r: 150, g: 57, b: 47 },
   "D": { r: 40, g: 40, b: 50 }, "d": { r: 20, g: 20, b: 30 }
 };
 
@@ -38,39 +40,36 @@ const ART = {
   ganmo: [" OOOO ", "OOOOOO", "oOOOOo", "oooooo", " oooo ", "  oo  "],
   mochi: ["  ll  ", " LLLL ", "LLLLLL", "llllll", " llll ", "  ll  "],
   chikuwa: [" CCcc ", "CCCCCC", "CCCCCC", "cccccc", " cccc ", "  cc  "],
-  shirataki: ["  SS  ", " SSSS ", "sSSsSS", "ssssss", " ssss ", "  ss  "]
+  shirataki: ["  SS  ", " SSSS ", "sSSsSS", "ssssss", " ssss ", "  ss  "],
+  wing: ["   RR  ", " RRRRR ", "RRrrRR", " rrrrr ", "  rr   ", "  r    "]
 };
 
-// 数字は一切使わない。具には「軽い・しみる・重い」の役割だけがある。
-const KIND = {
-  LIGHT: "LIGHT",
-  SOAK: "SOAK",
-  RICH: "RICH"
-};
-
+// score は最後の評価だけに使う。画面では「うまみの粒」で読む。
+// space はお椀の 10 区画をどれだけ埋めるか。
 const DISHES = [
-  { id: "SHIRATAKI", name: "しらたき", visual: "shirataki", kind: KIND.LIGHT, volume: 1 },
-  { id: "KONNYAKU", name: "こんにゃく", visual: "konnyaku", kind: KIND.LIGHT, volume: 1 },
-  { id: "CHIKUWA", name: "ちくわ", visual: "chikuwa", kind: KIND.LIGHT, volume: 1 },
-  { id: "EGG", name: "たまご", visual: "egg", kind: KIND.SOAK, volume: 2 },
-  { id: "DAIKON", name: "だいこん", visual: "daikon", kind: KIND.SOAK, volume: 2 },
-  { id: "GANMODOKI", name: "がんも", visual: "ganmo", kind: KIND.SOAK, volume: 2 },
-  { id: "MOCHI_POUCH", name: "餅巾着", visual: "mochi", kind: KIND.RICH, volume: 3 },
-  { id: "BEEF_TENDON", name: "牛すじ", visual: "beef", kind: KIND.RICH, volume: 3 }
+  { id: "SHIRATAKI", name: "しらたき", visual: "shirataki", score: 1, space: 1, specialBonus: 1, tag: "軽" },
+  { id: "KONNYAKU", name: "こんにゃく", visual: "konnyaku", score: 2, space: 1, specialBonus: 1, tag: "軽" },
+  { id: "CHIKUWA", name: "ちくわ", visual: "chikuwa", score: 2, space: 2, specialBonus: 2, tag: "軽" },
+  { id: "EGG", name: "たまご", visual: "egg", score: 3, space: 2, specialBonus: 2, tag: "染" },
+  { id: "DAIKON", name: "だいこん", visual: "daikon", score: 3, space: 3, specialBonus: 4, tag: "染" },
+  { id: "GANMODOKI", name: "がんも", visual: "ganmo", score: 4, space: 3, specialBonus: 2, tag: "染" },
+  { id: "BEEF_TENDON", name: "牛すじ", visual: "beef", score: 2, space: 2, specialBonus: 5, tag: "煮" },
+  { id: "MOCHI_POUCH", name: "餅巾着", visual: "mochi", score: 5, space: 4, specialBonus: 2, tag: "重" },
+  { id: "WING", name: "手羽先", visual: "wing", score: 6, space: 6, specialBonus: 1, tag: "重" }
 ];
 
 const LEFT_RIVAL = {
   name: "常連さん",
   coat: { r: 80, g: 61, b: 48 },
   hair: { r: 47, g: 40, b: 36 },
-  preference: KIND.SOAK
+  style: "SLOW"
 };
 
 const RIGHT_RIVAL = {
   name: "学生さん",
   coat: { r: 64, g: 80, b: 108 },
   hair: { r: 35, g: 35, b: 40 },
-  preference: KIND.LIGHT
+  style: "COMPACT"
 };
 
 let scaleFactor = 1;
@@ -88,30 +87,48 @@ class GameModel {
     this.state = STATE.TITLE;
     this.deck = [];
     this.pot = [];
+
     this.playerBowl = [];
     this.leftBowl = [];
     this.rightBowl = [];
+
+    this.playerSpace = 0;
+    this.leftSpace = 0;
+    this.rightSpace = 0;
+
     this.turn = 0;
     this.rivalPhase = 0;
     this.rivalTimer = 0;
     this.stateT = 0;
+
     this.message = "";
     this.lastTaken = null;
     this.lastTakenBy = "";
-    this.playerWaited = false;
+    this.lastEvent = "";
+
     this.resultTitle = "";
     this.resultLine = "";
+    this.resultRank = "";
   }
 
   makeDeck() {
     const deck = [];
-
-    // どの夜にも三つの役割が混ざる。ただし出てくる順番は毎回違う。
-    for (let i = 0; i < 3; i++) {
-      for (const dish of DISHES) {
-        deck.push({ ...dish, simmer: 0 });
+    const add = (id, count) => {
+      const base = DISHES.find(dish => dish.id === id);
+      for (let i = 0; i < count; i++) {
+        deck.push({ ...base, broth: 0, special: false });
       }
-    }
+    };
+
+    add("SHIRATAKI", 3);
+    add("KONNYAKU", 3);
+    add("CHIKUWA", 3);
+    add("EGG", 3);
+    add("DAIKON", 3);
+    add("GANMODOKI", 3);
+    add("BEEF_TENDON", 3);
+    add("MOCHI_POUCH", 2);
+    add("WING", 2);
 
     return deck.sort(() => Math.random() - 0.5);
   }
@@ -121,62 +138,152 @@ class GameModel {
     return this.deck.pop();
   }
 
-  refillPot() {
-    while (this.pot.length < POT_SIZE) {
-      const dish = this.drawDish();
-      if (!dish) break;
-      this.pot.push(dish);
+  fillEmptyPotSlots() {
+    for (let i = 0; i < POT_SIZE; i++) {
+      if (this.pot[i] !== null && this.pot[i] !== undefined) continue;
+      this.pot[i] = this.drawDish();
     }
   }
 
   startNight() {
     this.reset();
     this.deck = this.makeDeck();
-    this.refillPot();
+    this.pot = new Array(POT_SIZE).fill(null);
+    this.fillEmptyPotSlots();
+
     this.state = STATE.INTRO;
     this.stateT = 0;
-    this.message = "同じ鍋を、三人で囲んでいる。\n取りたい具は、今しかないかもしれない。";
+    this.message = "鍋を囲む三人の前に、具が並ぶ。\nお椀は、十の区画まで。";
   }
 
   startPlayerTurn() {
-    this.playerWaited = false;
     this.state = STATE.PLAYER_TURN;
     this.stateT = 0;
-    this.message = "鍋から一つ取る。\n待てば、残った具はもう少し染みる。";
+
+    if (this.getTakeableIndices("PLAYER").length === 0) {
+      this.message = "お椀に入る具が、もう見当たらない。\n今巡りは、箸を休めよう。";
+    } else {
+      this.message = "一つ取る。空いた場所の両隣に、\nだしがぽとっ、ぽとっと落ちる。";
+    }
+  }
+
+  getBowlFor(who) {
+    if (who === "LEFT") return this.leftBowl;
+    if (who === "RIGHT") return this.rightBowl;
+    return this.playerBowl;
+  }
+
+  getSpaceFor(who) {
+    if (who === "LEFT") return this.leftSpace;
+    if (who === "RIGHT") return this.rightSpace;
+    return this.playerSpace;
+  }
+
+  setSpaceFor(who, value) {
+    if (who === "LEFT") this.leftSpace = value;
+    else if (who === "RIGHT") this.rightSpace = value;
+    else this.playerSpace = value;
+  }
+
+  canTake(who, dish) {
+    if (!dish) return false;
+    return this.getSpaceFor(who) + dish.space <= BOWL_LIMIT;
+  }
+
+  getTakeableIndices(who) {
+    const indices = [];
+    for (let i = 0; i < POT_SIZE; i++) {
+      if (this.canTake(who, this.pot[i])) indices.push(i);
+    }
+    return indices;
+  }
+
+  getDishScore(dish) {
+    if (!dish) return 0;
+    return dish.score + (dish.special ? dish.specialBonus : 0);
+  }
+
+  getBowlScore(bowl) {
+    return bowl.reduce((total, dish) => total + this.getDishScore(dish), 0);
+  }
+
+  addToBowl(who, dish) {
+    const bowl = this.getBowlFor(who);
+    bowl.push(dish);
+    this.setSpaceFor(who, this.getSpaceFor(who) + dish.space);
   }
 
   takePotDish(index, who) {
-    if (index < 0 || index >= this.pot.length) return null;
+    const dish = this.pot[index];
+    if (!this.canTake(who, dish)) return null;
 
-    const dish = this.pot.splice(index, 1)[0];
-
-    if (who === "PLAYER") {
-      this.playerBowl.push(dish);
-    } else if (who === "LEFT") {
-      this.leftBowl.push(dish);
-    } else {
-      this.rightBowl.push(dish);
-    }
+    this.pot[index] = null;
+    this.addToBowl(who, dish);
 
     this.lastTaken = dish;
     this.lastTakenBy = who;
+    this.lastEvent = "";
+
+    this.dropBrothAround(index);
+    this.resolvePotChanges();
+    this.fillEmptyPotSlots();
 
     return dish;
+  }
+
+  dropBrothAround(index) {
+    const left = (index + POT_SIZE - 1) % POT_SIZE;
+    const right = (index + 1) % POT_SIZE;
+
+    this.addBrothToSlot(left);
+    this.addBrothToSlot(right);
+  }
+
+  addBrothToSlot(index) {
+    const dish = this.pot[index];
+    if (!dish) return;
+
+    dish.broth += 1;
+  }
+
+  resolvePotChanges() {
+    const events = [];
+
+    for (let i = 0; i < POT_SIZE; i++) {
+      const dish = this.pot[i];
+      if (!dish) continue;
+
+      if (dish.broth >= 4) {
+        events.push(`${dish.name}が煮崩れた`);
+        this.pot[i] = null;
+        continue;
+      }
+
+      if (dish.broth >= 3 && !dish.special) {
+        dish.special = true;
+        events.push(`${dish.name}が特製になった`);
+      }
+    }
+
+    if (events.length > 0) {
+      this.lastEvent = events.join("。") + "。";
+    }
   }
 
   playerTake(index) {
     const dish = this.takePotDish(index, "PLAYER");
     if (!dish) return;
 
-    this.message = `${dish.name}を、自分の椀へ。\n隣の二人も、鍋を見ている。`;
+    const specialText = dish.special ? " 特製を、自分の椀へ。" : "を、自分の椀へ。";
+    this.message = `${dish.name}${specialText}\n${this.lastEvent || "隣の具に、だしが回った。"}`;
     this.beginRivalsTurn();
   }
 
-  playerWait() {
-    this.playerWaited = true;
+  playerPass() {
     this.lastTaken = null;
     this.lastTakenBy = "";
-    this.message = "箸を置いて、少し待つ。\n残った具が、だしを吸っていく。";
+    this.lastEvent = "";
+    this.message = "今は、椀の余白を残しておく。\n隣の二人が、箸を伸ばす。";
     this.beginRivalsTurn();
   }
 
@@ -187,25 +294,33 @@ class GameModel {
     this.stateT = 0;
   }
 
-  chooseRivalDish(rival) {
-    if (this.pot.length === 0) return -1;
+  chooseRivalDish(rival, who) {
+    const choices = this.getTakeableIndices(who);
+    if (choices.length === 0) return -1;
 
-    let bestIndex = 0;
+    let bestIndex = choices[0];
     let bestScore = -999;
 
-    for (let i = 0; i < this.pot.length; i++) {
-      const dish = this.pot[i];
-      let score = Math.random() * 4;
+    for (const index of choices) {
+      const dish = this.pot[index];
+      const value = this.getDishScore(dish);
+      let score = value * 2 - dish.space * 0.45 + Math.random() * 2.5;
 
-      // 好みは固定の正解ではない。ただし、それぞれ少し行動の癖がある。
-      if (dish.kind === rival.preference) score += 7;
+      if (rival.style === "SLOW") {
+        score += dish.broth * 2.3;
+        if (dish.special) score += 5;
+        if (dish.id === "BEEF_TENDON" || dish.id === "DAIKON") score += 1.4;
+      }
 
-      // よく染みた具は、誰にとっても少し魅力的。
-      score += dish.simmer * 4;
+      if (rival.style === "COMPACT") {
+        score += (4 - Math.min(dish.space, 4)) * 1.4;
+        if (dish.space <= 2) score += 2.2;
+        if (dish.id === "WING") score -= 4;
+      }
 
       if (score > bestScore) {
         bestScore = score;
-        bestIndex = i;
+        bestIndex = index;
       }
     }
 
@@ -214,25 +329,21 @@ class GameModel {
 
   resolveRivalStep() {
     if (this.rivalPhase === 0) {
-      const index = this.chooseRivalDish(LEFT_RIVAL);
-      const dish = this.takePotDish(index, "LEFT");
-
-      if (dish) {
-        this.message = `${LEFT_RIVAL.name}は、${dish.name}を取った。`;
-      }
-
+      const index = this.chooseRivalDish(LEFT_RIVAL, "LEFT");
+      const dish = index >= 0 ? this.takePotDish(index, "LEFT") : null;
+      this.message = dish
+        ? `${LEFT_RIVAL.name}は、${dish.name}を取った。\n${this.lastEvent || "空いた両隣に、だしが落ちた。"}`
+        : `${LEFT_RIVAL.name}は、椀の余白を見て箸を置いた。`;
       this.rivalPhase = 1;
       return;
     }
 
     if (this.rivalPhase === 1) {
-      const index = this.chooseRivalDish(RIGHT_RIVAL);
-      const dish = this.takePotDish(index, "RIGHT");
-
-      if (dish) {
-        this.message = `${RIGHT_RIVAL.name}は、${dish.name}を取った。`;
-      }
-
+      const index = this.chooseRivalDish(RIGHT_RIVAL, "RIGHT");
+      const dish = index >= 0 ? this.takePotDish(index, "RIGHT") : null;
+      this.message = dish
+        ? `${RIGHT_RIVAL.name}は、${dish.name}を取った。\n${this.lastEvent || "鍋の具が、少し並び替わった。"}`
+        : `${RIGHT_RIVAL.name}は、椀を抱えて待っている。`;
       this.rivalPhase = 2;
       return;
     }
@@ -240,16 +351,16 @@ class GameModel {
     this.finishTableTurn();
   }
 
-  finishTableTurn() {
-    // 誰にも取られなかった具だけが、少しずつ染みる。
-    for (const dish of this.pot) {
-      dish.simmer = Math.min(2, dish.simmer + 1);
-    }
+  allPlayersBlocked() {
+    return this.getTakeableIndices("PLAYER").length === 0 &&
+      this.getTakeableIndices("LEFT").length === 0 &&
+      this.getTakeableIndices("RIGHT").length === 0;
+  }
 
-    this.refillPot();
+  finishTableTurn() {
     this.turn += 1;
 
-    if (this.turn >= TURNS_PER_NIGHT) {
+    if (this.turn >= TURNS_PER_NIGHT || this.allPlayersBlocked()) {
       this.finishNight();
       return;
     }
@@ -257,43 +368,40 @@ class GameModel {
     this.startPlayerTurn();
   }
 
-  getKindsInPlayerBowl() {
-    const kinds = {};
-
-    for (const dish of this.playerBowl) {
-      kinds[dish.kind] = true;
-    }
-
-    return kinds;
+  getSpecialCount(bowl) {
+    return bowl.filter(dish => dish.special).length;
   }
 
   finishNight() {
-    const kinds = this.getKindsInPlayerBowl();
-    const hasLight = !!kinds[KIND.LIGHT];
-    const hasSoak = !!kinds[KIND.SOAK];
-    const hasRich = !!kinds[KIND.RICH];
-    const maxSimmer = this.playerBowl.reduce((max, dish) => {
-      return Math.max(max, dish.simmer);
-    }, 0);
+    const score = this.getBowlScore(this.playerBowl);
+    const leftScore = this.getBowlScore(this.leftBowl);
+    const rightScore = this.getBowlScore(this.rightBowl);
+    const specials = this.getSpecialCount(this.playerBowl);
 
     if (this.playerBowl.length === 0) {
-      this.resultTitle = "空いた椀。";
+      this.resultTitle = "空いたお椀。";
       this.resultLine = "今夜は、鍋の景色だけを\n眺めて帰ることにした。";
-    } else if (hasLight && hasSoak && hasRich && maxSimmer >= 2) {
-      this.resultTitle = "今夜の、ひと椀。";
-      this.resultLine = "軽さも、しみ方も、満足もある。\n待った時間まで、椀に入っている。";
-    } else if (hasLight && hasSoak && hasRich) {
-      this.resultTitle = "よくまとまった椀。";
-      this.resultLine = "鍋を囲んだ四巡りが、\nちょうど一つの夜になった。";
-    } else if (maxSimmer >= 2) {
+      this.resultRank = "見送り";
+    } else if (specials >= 2 && score >= leftScore && score >= rightScore) {
+      this.resultTitle = "特製の、ひと椀。";
+      this.resultLine = "待った時間も、取った順番も、\nだしの中でちゃんとつながった。";
+      this.resultRank = "今夜の一番椀";
+    } else if (score >= leftScore && score >= rightScore) {
+      this.resultTitle = "今夜の一番椀。";
+      this.resultLine = "小さな余白を使い切って、\n鍋の中から、いいところを取った。";
+      this.resultRank = "いちばん満ちた椀";
+    } else if (specials >= 1) {
       this.resultTitle = "しみた椀。";
-      this.resultLine = "誰かに取られず残った具が、\n静かに主役になった。";
-    } else if (this.playerBowl.length < 3) {
-      this.resultTitle = "少し軽い椀。";
-      this.resultLine = "待っている間に、\n隣の二人が先に箸を伸ばした。";
+      this.resultLine = "欲張らずに残した具が、\n最後に、いちばん印象に残った。";
+      this.resultRank = "特製入り";
+    } else if (this.playerSpace >= 9) {
+      this.resultTitle = "ぎゅうぎゅうの椀。";
+      this.resultLine = "大きい具を先に取った夜。\n余白は少ないが、満足は残った。";
+      this.resultRank = "満員";
     } else {
       this.resultTitle = "今夜の椀。";
-      this.resultLine = "鍋の中から選んだものだけで、\nちゃんと夜はできている。";
+      this.resultLine = "鍋の流れに合わせて取った具が、\n静かに、ひとつの夜になった。";
+      this.resultRank = "ほどよい一杯";
     }
 
     this.state = STATE.RESULT;
@@ -323,8 +431,8 @@ function touched(touch) {
 
   const x = (touch.x - offsetX) / scaleFactor;
   const y = (touch.y - offsetY) / scaleFactor;
-
   if (x < 0 || x > GAME_W || y < 0 || y > GAME_H) return;
+
   handleTap(x, y);
 }
 
@@ -338,19 +446,19 @@ function isInside(x, y, rx, ry, rw, rh) {
 
 function getPotSlotRect(index) {
   const positions = [
-    { x: 14, y: 205 },
-    { x: 65, y: 205 },
-    { x: 116, y: 205 },
-    { x: 39, y: 176 },
-    { x: 91, y: 176 }
+    { x: 18, y: 194 },
+    { x: 67, y: 202 },
+    { x: 116, y: 194 },
+    { x: 116, y: 165 },
+    { x: 67, y: 157 },
+    { x: 18, y: 165 }
   ];
-
   const p = positions[index] || positions[0];
-  return { x: p.x, y: p.y, w: 48, h: 26 };
+  return { x: p.x, y: p.y, w: 46, h: 25 };
 }
 
-function getWaitRect() {
-  return { x: 42, y: 13, w: 96, h: 25 };
+function getPassRect() {
+  return { x: 41, y: 12, w: 98, h: 25 };
 }
 
 function getRetryRect() {
@@ -365,8 +473,12 @@ function handleTap(x, y) {
   }
 
   if (model.state === STATE.PLAYER_TURN) {
-    for (let i = 0; i < model.pot.length; i++) {
+    for (let i = 0; i < POT_SIZE; i++) {
       const slot = getPotSlotRect(i);
+      const dish = model.pot[i];
+      if (!dish) continue;
+      if (!model.canTake("PLAYER", dish)) continue;
+
       if (isInside(x, y, slot.x, slot.y, slot.w, slot.h)) {
         model.playerTake(i);
         lockInput();
@@ -374,12 +486,11 @@ function handleTap(x, y) {
       }
     }
 
-    const wait = getWaitRect();
-    if (isInside(x, y, wait.x, wait.y, wait.w, wait.h)) {
-      model.playerWait();
+    const pass = getPassRect();
+    if (isInside(x, y, pass.x, pass.y, pass.w, pass.h)) {
+      model.playerPass();
       lockInput();
     }
-
     return;
   }
 
@@ -435,8 +546,7 @@ function updateState() {
 
   if (model.state === STATE.RIVALS_TURN) {
     model.rivalTimer += DeltaTime;
-
-    if (model.rivalTimer > 0.72) {
+    if (model.rivalTimer > 0.76) {
       model.rivalTimer = 0;
       model.resolveRivalStep();
     }
@@ -454,7 +564,6 @@ function drawPixelArt(px, py, data, size) {
     for (let c = 0; c < data[r].length; c++) {
       const colorData = PALETTE[data[r][c]];
       if (!colorData) continue;
-
       fill(colorData.r, colorData.g, colorData.b);
       rect(px + c * size, py + (data.length - 1 - r) * size, size, size);
     }
@@ -467,7 +576,6 @@ function drawSplitText(textValue, x, y, maxLen, lineH) {
 
   for (const raw of rawLines) {
     let lineValue = "";
-
     for (let i = 0; i < raw.length; i++) {
       lineValue += raw[i];
       if (lineValue.length >= maxLen) {
@@ -475,7 +583,6 @@ function drawSplitText(textValue, x, y, maxLen, lineH) {
         lineValue = "";
       }
     }
-
     if (lineValue.length > 0) lines.push(lineValue);
   }
 
@@ -485,45 +592,65 @@ function drawSplitText(textValue, x, y, maxLen, lineH) {
   }
 }
 
-function getKindLabel(kind) {
-  if (kind === KIND.SOAK) return "染";
-  if (kind === KIND.RICH) return "重";
-  return "軽";
-}
-
-function getKindColor(kind) {
-  if (kind === KIND.SOAK) return { r: 129, g: 83, b: 54 };
-  if (kind === KIND.RICH) return { r: 121, g: 57, b: 48 };
-  return { r: 72, g: 91, b: 103 };
-}
-
-function drawSimmerMark(x, y, simmer, compact) {
-  if (simmer <= 0) return;
-
-  const count = compact ? simmer : simmer + 1;
+function drawBrothTokens(x, y, count, compact) {
   for (let i = 0; i < count; i++) {
-    const wave = Math.sin(ElapsedTime * 3 + i) * 1;
-    fill(255, 236, 183, 130 + simmer * 38);
-    rect(x + i * 4 + wave, y, 2, compact ? 3 : 5);
+    const wobble = Math.sin(ElapsedTime * 4 + i) * 0.8;
+    fill(255, 231, 159, 190);
+    rect(x + i * (compact ? 3 : 5) + wobble, y, compact ? 2 : 3, compact ? 2 : 3);
+  }
+}
+
+function drawTasteMarks(x, y, count) {
+  const shown = Math.min(count, 6);
+  for (let i = 0; i < shown; i++) {
+    fill(246, 217, 142, 220);
+    rect(x + i * 3, y, 2, 3);
+  }
+}
+
+function drawSpaceMarks(x, y, count) {
+  const shown = Math.min(count, 6);
+  for (let i = 0; i < shown; i++) {
+    fill(93, 68, 53, 230);
+    rect(x + i * 3, y, 2, 2);
+  }
+}
+
+function drawCapacityTicks(x, y, used, compact) {
+  const size = compact ? 3 : 5;
+  const gap = compact ? 1 : 2;
+
+  for (let i = 0; i < BOWL_LIMIT; i++) {
+    const filled = i < used;
+    fill(filled ? 221 : 91, filled ? 171 : 76, filled ? 91 : 64);
+    rect(x + i * (size + gap), y, size, compact ? 3 : 5);
   }
 }
 
 function drawBowlDish(dish, index, x, y, isPlayer) {
   const positions = [
-    { x: 16, y: 7 }, { x: 51, y: 7 }, { x: 35, y: 16 }, { x: 67, y: 18 }
+    { x: 13, y: 8 }, { x: 42, y: 7 }, { x: 68, y: 8 },
+    { x: 27, y: 19 }, { x: 57, y: 20 }, { x: 44, y: 29 }
   ];
   const p = positions[Math.min(index, positions.length - 1)];
-  const size = dish.volume >= 3 ? 2 : 1.7;
+  const size = dish.space >= 5 ? 2.1 : (dish.space >= 3 ? 1.9 : 1.6);
   const pulse = model.lastTaken === dish && model.lastTakenBy === "PLAYER" && isPlayer
-    ? Math.sin(ElapsedTime * 18) * 1.4
+    ? Math.sin(ElapsedTime * 18) * 1.2
     : 0;
 
-  drawPixelArt(x + p.x, y + p.y + pulse, ART[dish.visual], size);
-
-  if (dish.simmer >= 2) {
-    fill(255, 224, 155, 42);
-    rect(x + p.x - 2, y + p.y - 2, 18, 13);
+  if (dish.special) {
+    fill(255, 220, 142, 36);
+    rect(x + p.x - 3, y + p.y - 2, 20, 15);
   }
+
+  drawPixelArt(x + p.x, y + p.y + pulse, ART[dish.visual], size);
+}
+
+function getSlotKindColor(dish) {
+  if (dish.tag === "重") return { r: 130, g: 59, b: 48 };
+  if (dish.tag === "煮") return { r: 129, g: 82, b: 54 };
+  if (dish.tag === "染") return { r: 95, g: 91, b: 56 };
+  return { r: 72, g: 91, b: 103 };
 }
 
 // ==========================================
@@ -569,7 +696,7 @@ function drawBackground() {
   noStroke();
 }
 
-function drawRivalPerson(x, rival, bowl, side) {
+function drawRivalPerson(x, rival, bowl, used, side) {
   rectMode(CORNER);
   noStroke();
 
@@ -595,7 +722,6 @@ function drawRivalPerson(x, rival, bowl, side) {
   rect(x - 4, 285 + bob, 2, 2);
   rect(x + 3, 285 + bob, 2, 2);
 
-  // 小さな椀。ほかの客が実際に鍋を削っていることを見せる。
   fill(61, 39, 34);
   rect(x - 13, 235, 26, 8);
   fill(184, 127, 66);
@@ -605,6 +731,8 @@ function drawRivalPerson(x, rival, bowl, side) {
     drawPixelArt(x - 9 + i * 6, 241, ART[bowl[i].visual], 0.8);
   }
 
+  drawCapacityTicks(x - 14, 232, used, true);
+
   fill(229, 218, 193);
   textSize(6);
   textAlign("center");
@@ -612,8 +740,8 @@ function drawRivalPerson(x, rival, bowl, side) {
 }
 
 function drawRivals() {
-  drawRivalPerson(25, LEFT_RIVAL, model.leftBowl, "LEFT");
-  drawRivalPerson(155, RIGHT_RIVAL, model.rightBowl, "RIGHT");
+  drawRivalPerson(25, LEFT_RIVAL, model.leftBowl, model.leftSpace, "LEFT");
+  drawRivalPerson(155, RIGHT_RIVAL, model.rightBowl, model.rightSpace, "RIGHT");
 }
 
 function drawCounter() {
@@ -622,13 +750,10 @@ function drawCounter() {
 
   fill(73, 48, 39);
   rect(0, 145, GAME_W, 33);
-
   fill(113, 72, 50);
   rect(0, 171, GAME_W, 7);
-
   fill(60, 40, 35);
   rect(0, 141, GAME_W, 5);
-
   fill(168, 113, 65, 36);
   rect(0, 164, GAME_W, 2);
 
@@ -648,16 +773,16 @@ function drawPot() {
   noStroke();
 
   fill(52, 57, 63);
-  rect(8, 173, 164, 69);
+  rect(8, 150, 164, 93);
   fill(104, 109, 114);
-  rect(11, 176, 158, 63);
+  rect(11, 153, 158, 87);
   fill(43, 45, 49);
-  rect(15, 179, 150, 56);
+  rect(15, 156, 150, 80);
   fill(198, 142, 67);
-  rect(18, 182, 144, 49);
+  rect(18, 159, 144, 73);
 
-  // 具が残るほど、鍋の中に小さな湯気が増える。
-  const steam = 3 + model.pot.reduce((total, dish) => total + dish.simmer, 0);
+  const brothTotal = model.pot.reduce((sum, dish) => sum + (dish ? dish.broth : 0), 0);
+  const steam = 3 + brothTotal;
   for (let i = 0; i < steam; i++) {
     const sx = 27 + ((i * 19) % 125) + Math.sin(ElapsedTime * 1.6 + i) * 2;
     const sy = 225 + (i % 2) * 3;
@@ -665,21 +790,31 @@ function drawPot() {
     rect(sx, sy, 4, 8 + (i % 2) * 4);
   }
 
-  for (let i = 0; i < model.pot.length; i++) {
+  // 円の中に 6 つの具。空いた場所の左右にだしが回る。
+  for (let i = 0; i < POT_SIZE; i++) {
     const dish = model.pot[i];
     const slot = getPotSlotRect(i);
-    const selected = model.state === STATE.PLAYER_TURN;
-    const kindColor = getKindColor(dish.kind);
 
     fill(75, 59, 47);
     rect(slot.x - 1, slot.y - 1, slot.w + 2, slot.h + 2);
-    fill(230, 177, 89);
+
+    if (!dish) {
+      fill(118, 86, 57);
+      rect(slot.x, slot.y, slot.w, slot.h);
+      continue;
+    }
+
+    fill(dish.special ? 238 : 230, dish.special ? 190 : 177, dish.special ? 98 : 89);
     rect(slot.x, slot.y, slot.w, slot.h);
     fill(255, 225, 158, 28);
     rect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4);
 
-    if (selected) {
-      fill(255, 243, 213, 32 + Math.sin(ElapsedTime * 4 + i) * 15);
+    const selectable = model.state === STATE.PLAYER_TURN && model.canTake("PLAYER", dish);
+    if (selectable) {
+      fill(255, 243, 213, 28 + Math.sin(ElapsedTime * 4 + i) * 15);
+      rect(slot.x + 1, slot.y + 1, slot.w - 2, slot.h - 2);
+    } else if (model.state === STATE.PLAYER_TURN) {
+      fill(35, 31, 29, 70);
       rect(slot.x + 1, slot.y + 1, slot.w - 2, slot.h - 2);
     }
 
@@ -690,14 +825,26 @@ function drawPot() {
     textAlign("left");
     text(dish.name, slot.x + 17, slot.y + 13);
 
-    fill(kindColor.r, kindColor.g, kindColor.b);
-    rect(slot.x + 18, slot.y + 4, 8, 5);
+    const tagColor = getSlotKindColor(dish);
+    fill(tagColor.r, tagColor.g, tagColor.b);
+    rect(slot.x + 18, slot.y + 4, 7, 5);
     fill(255, 244, 220);
     textSize(5);
     textAlign("center");
-    text(getKindLabel(dish.kind), slot.x + 22, slot.y + 5);
+    text(dish.tag, slot.x + 21.5, slot.y + 5);
 
-    drawSimmerMark(slot.x + 31, slot.y + 4, dish.simmer, true);
+    // 金の粒はうまみ、濃い茶の粒はお椀で使う場所。
+    // 数字を読ませず、手羽先の「大きさ」を目で判断できるようにする。
+    drawTasteMarks(slot.x + 27, slot.y + 7, dish.score);
+    drawSpaceMarks(slot.x + 27, slot.y + 3, dish.space);
+    drawBrothTokens(slot.x + 28, slot.y + 20, dish.broth, true);
+
+    if (dish.special) {
+      fill(255, 242, 183);
+      textSize(5);
+      textAlign("right");
+      text("特", slot.x + slot.w - 4, slot.y + 16);
+    }
   }
 
   fill(238, 224, 195);
@@ -708,7 +855,7 @@ function drawPot() {
   fill(108, 78, 54);
   textSize(6);
   textAlign("right");
-  text("軽 染 重", 165, 247);
+  text("だし 3 で特製 4 で煮崩れ", 165, 247);
 }
 
 function drawPlayerBowl() {
@@ -716,21 +863,21 @@ function drawPlayerBowl() {
   noStroke();
 
   const x = 38;
-  const y = 63;
+  const y = 57;
 
   fill(8, 10, 14, 105);
   rect(x + 11, y - 5, 96, 5);
 
   fill(76, 45, 38);
-  rect(x, y, 106, 50);
+  rect(x, y, 106, 56);
   fill(117, 67, 48);
-  rect(x + 4, y + 4, 98, 42);
+  rect(x + 4, y + 4, 98, 48);
   fill(224, 208, 176);
-  rect(x + 9, y + 36, 88, 6);
+  rect(x + 9, y + 42, 88, 6);
   fill(83, 51, 38);
-  rect(x + 12, y + 9, 82, 29);
+  rect(x + 12, y + 9, 82, 35);
   fill(182, 125, 62);
-  rect(x + 15, y + 13, 76, 21);
+  rect(x + 15, y + 13, 76, 27);
 
   for (let i = 0; i < model.playerBowl.length; i++) {
     drawBowlDish(model.playerBowl[i], i, x, y, true);
@@ -740,27 +887,18 @@ function drawPlayerBowl() {
     fill(240, 221, 182, 130);
     textSize(7);
     textAlign("center");
-    text("まだ、空いている", GAME_W / 2, 82);
+    text("まだ、空いている", GAME_W / 2, 80);
   }
 
   fill(228, 216, 191);
   textSize(7);
   textAlign("left");
-  text("あなたのお椀", 40, 121);
+  text("あなたのお椀", 40, 120);
 
-  // 数字を出さず、役割の揃い方だけを小さな札で見せる。
-  const kinds = model.getKindsInPlayerBowl();
-  const labels = [KIND.LIGHT, KIND.SOAK, KIND.RICH];
-  for (let i = 0; i < labels.length; i++) {
-    const kind = labels[i];
-    const color = getKindColor(kind);
-    fill(kinds[kind] ? color.r : 83, kinds[kind] ? color.g : 78, kinds[kind] ? color.b : 68);
-    rect(110 + i * 13, 117, 10, 7);
-    fill(244, 237, 220, kinds[kind] ? 255 : 95);
-    textSize(5);
-    textAlign("center");
-    text(getKindLabel(kind), 115 + i * 13, 118);
-  }
+  fill(156, 116, 72);
+  textSize(6);
+  text("余白", 40, 111);
+  drawCapacityTicks(58, 109, model.playerSpace, false);
 }
 
 function drawHeader() {
@@ -775,14 +913,14 @@ function drawHeader() {
   fill(239, 228, 200);
   textSize(10);
   textAlign("left");
-  text("今夜のおでん", 8, 303);
+  text("コトコトおでん", 8, 303);
 
   fill(180, 187, 198);
   textSize(7);
   textAlign("right");
   text("鍋を囲む夜", 172, 304);
 
-  // 一巡ごとに提灯が一つ灯る。回数を数字で言わない。
+  // 一巡ごとに提灯が一つ灯る。
   for (let i = 0; i < TURNS_PER_NIGHT; i++) {
     const lit = i < model.turn;
     fill(lit ? 236 : 91, lit ? 183 : 77, lit ? 88 : 63);
@@ -795,9 +933,9 @@ function drawMessage() {
   noStroke();
 
   fill(14, 18, 27, 235);
-  rect(9, 130, 162, 40);
+  rect(9, 127, 162, 40);
   fill(95, 69, 54);
-  rect(9, 167, 162, 3);
+  rect(9, 164, 162, 3);
 
   let speaker = "あなた";
   if (model.state === STATE.RIVALS_TURN) {
@@ -807,29 +945,29 @@ function drawMessage() {
   fill(240, 221, 185);
   textSize(9);
   textAlign("left");
-  text(speaker, 17, 157);
+  text(speaker, 17, 154);
 
   fill(211, 215, 219);
   textSize(8);
-  drawSplitText(model.message, 17, 140, 19, 10);
+  drawSplitText(model.message, 17, 137, 19, 10);
 }
 
 function drawControls() {
   if (model.state !== STATE.PLAYER_TURN) return;
 
-  const wait = getWaitRect();
+  const pass = getPassRect();
   rectMode(CORNER);
   noStroke();
 
-  fill(111, 61, 43);
-  rect(wait.x, wait.y, wait.w, wait.h);
-  fill(205, 130, 76);
-  rect(wait.x + 3, wait.y + 3, wait.w - 6, wait.h - 6);
+  fill(74, 52, 41);
+  rect(pass.x, pass.y, pass.w, pass.h);
+  fill(230, 216, 188);
+  rect(pass.x + 3, pass.y + 3, pass.w - 6, pass.h - 6);
 
-  fill(255, 243, 217);
+  fill(77, 53, 41);
   textSize(9);
   textAlign("center");
-  text("今日は、少し待つ", GAME_W / 2, 22);
+  text("今は、余白を残す", GAME_W / 2, 21);
 
   fill(245, 232, 205, 155 + Math.sin(ElapsedTime * 5) * 35);
   textSize(7);
@@ -855,15 +993,23 @@ function drawResult() {
   textAlign("center");
   text(model.resultTitle, GAME_W / 2, 234);
 
-  // 最後に選んだ椀を小さく見せる。
+  fill(155, 108, 66);
+  textSize(8);
+  text(model.resultRank, GAME_W / 2, 218);
+
+  // 最後に選んだ椀を、小さく見せる。
   fill(115, 70, 47);
-  rect(49, 181, 82, 26);
+  rect(43, 180, 94, 30);
   fill(184, 125, 62);
-  rect(54, 185, 72, 14);
+  rect(48, 184, 84, 17);
   for (let i = 0; i < model.playerBowl.length; i++) {
     const dish = model.playerBowl[i];
-    const px = 58 + (i % 3) * 22;
-    const py = 188 + Math.floor(i / 3) * 7;
+    const px = 53 + (i % 3) * 24;
+    const py = 188 + Math.floor(i / 3) * 8;
+    if (dish.special) {
+      fill(255, 220, 142, 45);
+      rect(px - 2, py - 2, 17, 12);
+    }
     drawPixelArt(px, py, ART[dish.visual], 1.1);
   }
 
@@ -908,9 +1054,9 @@ function drawTitle() {
   fill(203, 145, 68);
   rect(27, 138, 126, 27);
 
-  drawPixelArt(44, 143, ART.daikon, 3);
-  drawPixelArt(82, 143, ART.egg, 3);
-  drawPixelArt(119, 143, ART.ganmo, 3);
+  drawPixelArt(43, 143, ART.daikon, 3);
+  drawPixelArt(80, 143, ART.beef, 3);
+  drawPixelArt(118, 143, ART.wing, 3);
 
   for (let i = 0; i < 5; i++) {
     const sx = 40 + i * 24 + Math.sin(ElapsedTime * 1.2 + i) * 3;
@@ -922,12 +1068,12 @@ function drawTitle() {
   fill(245, 233, 208);
   textSize(23);
   textAlign("center");
-  text("今夜のおでん", GAME_W / 2, 239);
+  text("コトコトおでん", GAME_W / 2, 239);
 
   fill(190, 196, 205);
   textSize(9);
-  text("同じ鍋から、何を取るか。", GAME_W / 2, 219);
-  text("待てば染みる。でも、誰かが取る。", GAME_W / 2, 205);
+  text("椀の余白は、十区画だけ。", GAME_W / 2, 219);
+  text("取るたび、隣の具にだしが回る。", GAME_W / 2, 205);
 
   fill(245, 233, 208, 150 + Math.sin(ElapsedTime * 5) * 80);
   textSize(9);
