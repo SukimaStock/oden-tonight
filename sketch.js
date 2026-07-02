@@ -617,34 +617,96 @@ function drawSpaceMarks(x, y, count) {
 }
 
 function drawCapacityTicks(x, y, used, compact) {
-  const size = compact ? 3 : 5;
-  const gap = compact ? 1 : 2;
+  const width = compact ? 28 : 70;
+  const height = compact ? 3 : 5;
+  const ratio = Math.max(0, Math.min(1, used / BOWL_LIMIT));
 
-  for (let i = 0; i < BOWL_LIMIT; i++) {
-    const filled = i < used;
-    fill(filled ? 221 : 91, filled ? 171 : 76, filled ? 91 : 64);
-    rect(x + i * (size + gap), y, size, compact ? 3 : 5);
+  fill(76, 58, 46, 150);
+  rect(x, y, width, height);
+
+  if (ratio <= 0) {
+    return;
   }
+
+  let fillR = 189;
+  let fillG = 132;
+  let fillB = 69;
+
+  if (ratio >= 0.8) {
+    fillR = 217;
+    fillG = 159;
+    fillB = 77;
+  } else if (ratio >= 0.55) {
+    fillR = 204;
+    fillG = 145;
+    fillB = 71;
+  }
+
+  fill(fillR, fillG, fillB);
+  rect(x, y, width * ratio, height);
+
+  fill(255, 228, 167, 55);
+  rect(x, y + height - 1, width * ratio, 1);
 }
+
 
 function drawBowlDish(dish, index, x, y, isPlayer) {
   const positions = [
-    { x: 13, y: 8 }, { x: 42, y: 7 }, { x: 68, y: 8 },
-    { x: 27, y: 19 }, { x: 57, y: 20 }, { x: 44, y: 29 }
+    { x: 13, y: 8 },
+    { x: 42, y: 7 },
+    { x: 68, y: 8 },
+    { x: 27, y: 19 },
+    { x: 57, y: 20 },
+    { x: 44, y: 29 }
   ];
-  const p = positions[Math.min(index, positions.length - 1)];
-  const size = dish.space >= 5 ? 2.1 : (dish.space >= 3 ? 1.9 : 1.6);
-  const pulse = model.lastTaken === dish && model.lastTakenBy === "PLAYER" && isPlayer
-    ? Math.sin(ElapsedTime * 18) * 1.2
-    : 0;
 
-  if (dish.special) {
-    fill(255, 220, 142, 36);
-    rect(x + p.x - 3, y + p.y - 2, 20, 15);
+  const p = positions[Math.min(index, positions.length - 1)];
+
+  let size = 1.4;
+
+  if (dish.space >= 6) {
+    size = 2.65;
+  } else if (dish.space >= 4) {
+    size = 2.2;
+  } else if (dish.space >= 3) {
+    size = 1.95;
+  } else if (dish.space >= 2) {
+    size = 1.65;
   }
 
-  drawPixelArt(x + p.x, y + p.y + pulse, ART[dish.visual], size);
+  const pulse =
+    model.lastTaken === dish &&
+    model.lastTakenBy === "PLAYER" &&
+    isPlayer
+      ? Math.sin(ElapsedTime * 18) * 1.2
+      : 0;
+
+  if (dish.special) {
+    fill(255, 218, 132, 48);
+    rect(
+      x + p.x - 4,
+      y + p.y - 3,
+      22,
+      17
+    );
+  } else if (dish.broth >= 2) {
+    fill(255, 214, 134, 25);
+    rect(
+      x + p.x - 3,
+      y + p.y - 2,
+      19,
+      14
+    );
+  }
+
+  drawPixelArt(
+    x + p.x,
+    y + p.y + pulse,
+    ART[dish.visual],
+    size
+  );
 }
+
 
 function getSlotKindColor(dish) {
   if (dish.tag === "重") return { r: 130, g: 59, b: 48 };
@@ -774,29 +836,45 @@ function drawPot() {
 
   fill(52, 57, 63);
   rect(8, 150, 164, 93);
+
   fill(104, 109, 114);
   rect(11, 153, 158, 87);
+
   fill(43, 45, 49);
   rect(15, 156, 150, 80);
+
   fill(198, 142, 67);
   rect(18, 159, 144, 73);
 
-  const brothTotal = model.pot.reduce((sum, dish) => sum + (dish ? dish.broth : 0), 0);
+  const brothTotal = model.pot.reduce(function(sum, dish) {
+    return sum + (dish ? dish.broth : 0);
+  }, 0);
+
   const steam = 3 + brothTotal;
+
   for (let i = 0; i < steam; i++) {
-    const sx = 27 + ((i * 19) % 125) + Math.sin(ElapsedTime * 1.6 + i) * 2;
+    const sx =
+      27 +
+      ((i * 19) % 125) +
+      Math.sin(ElapsedTime * 1.6 + i) * 2;
+
     const sy = 225 + (i % 2) * 3;
+
     fill(250, 239, 211, 22 + (i % 3) * 11);
     rect(sx, sy, 4, 8 + (i % 2) * 4);
   }
 
-  // 円の中に 6 つの具。空いた場所の左右にだしが回る。
   for (let i = 0; i < POT_SIZE; i++) {
     const dish = model.pot[i];
     const slot = getPotSlotRect(i);
 
     fill(75, 59, 47);
-    rect(slot.x - 1, slot.y - 1, slot.w + 2, slot.h + 2);
+    rect(
+      slot.x - 1,
+      slot.y - 1,
+      slot.w + 2,
+      slot.h + 2
+    );
 
     if (!dish) {
       fill(118, 86, 57);
@@ -804,46 +882,134 @@ function drawPot() {
       continue;
     }
 
-    fill(dish.special ? 238 : 230, dish.special ? 190 : 177, dish.special ? 98 : 89);
-    rect(slot.x, slot.y, slot.w, slot.h);
-    fill(255, 225, 158, 28);
-    rect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4);
+    let baseR = 213;
+    let baseG = 157;
+    let baseB = 76;
 
-    const selectable = model.state === STATE.PLAYER_TURN && model.canTake("PLAYER", dish);
-    if (selectable) {
-      fill(255, 243, 213, 28 + Math.sin(ElapsedTime * 4 + i) * 15);
-      rect(slot.x + 1, slot.y + 1, slot.w - 2, slot.h - 2);
-    } else if (model.state === STATE.PLAYER_TURN) {
-      fill(35, 31, 29, 70);
-      rect(slot.x + 1, slot.y + 1, slot.w - 2, slot.h - 2);
+    if (dish.broth >= 2) {
+      baseR = 224;
+      baseG = 171;
+      baseB = 82;
+    } else if (dish.broth >= 1) {
+      baseR = 219;
+      baseG = 164;
+      baseB = 79;
     }
 
-    drawPixelArt(slot.x + 4, slot.y + 9, ART[dish.visual], 1.3);
+    if (dish.special) {
+      baseR = 242;
+      baseG = 194;
+      baseB = 100;
+    }
+
+    fill(baseR, baseG, baseB);
+    rect(slot.x, slot.y, slot.w, slot.h);
+
+    fill(255, 229, 162, 25 + dish.broth * 9);
+    rect(
+      slot.x + 2,
+      slot.y + 2,
+      slot.w - 4,
+      slot.h - 4
+    );
+
+    if (dish.special) {
+      fill(255, 239, 176);
+      rect(slot.x, slot.y, slot.w, 2);
+      rect(slot.x, slot.y + slot.h - 2, slot.w, 2);
+      rect(slot.x, slot.y, 2, slot.h);
+      rect(slot.x + slot.w - 2, slot.y, 2, slot.h);
+    }
+
+    const steamLevel = dish.special ? 3 : dish.broth;
+
+    for (let j = 0; j < steamLevel; j++) {
+      const sway =
+        Math.sin(ElapsedTime * 2.4 + i + j) * 1.2;
+
+      fill(
+        255,
+        244,
+        212,
+        dish.special ? 82 : 40 + dish.broth * 16
+      );
+
+      rect(
+        slot.x + 8 + j * 7 + sway,
+        slot.y + 18,
+        2,
+        5 + j * 2
+      );
+    }
+
+    let dishSize = 1.25;
+
+    if (dish.space >= 6) {
+      dishSize = 2.4;
+    } else if (dish.space >= 4) {
+      dishSize = 2.0;
+    } else if (dish.space >= 3) {
+      dishSize = 1.75;
+    } else if (dish.space >= 2) {
+      dishSize = 1.5;
+    }
+
+    const artX = slot.x + 4;
+    const artY = slot.y + 7;
+
+    drawPixelArt(
+      artX,
+      artY,
+      ART[dish.visual],
+      dishSize
+    );
 
     fill(71, 49, 37);
     textSize(5);
     textAlign("left");
-    text(dish.name, slot.x + 17, slot.y + 13);
-
-    const tagColor = getSlotKindColor(dish);
-    fill(tagColor.r, tagColor.g, tagColor.b);
-    rect(slot.x + 18, slot.y + 4, 7, 5);
-    fill(255, 244, 220);
-    textSize(5);
-    textAlign("center");
-    text(dish.tag, slot.x + 21.5, slot.y + 5);
-
-    // 金の粒はうまみ、濃い茶の粒はお椀で使う場所。
-    // 数字を読ませず、手羽先の「大きさ」を目で判断できるようにする。
-    drawTasteMarks(slot.x + 27, slot.y + 7, dish.score);
-    drawSpaceMarks(slot.x + 27, slot.y + 3, dish.space);
-    drawBrothTokens(slot.x + 28, slot.y + 20, dish.broth, true);
+    text(
+      dish.name,
+      slot.x + 21,
+      slot.y + 13
+    );
 
     if (dish.special) {
-      fill(255, 242, 183);
+      fill(255, 245, 194);
       textSize(5);
       textAlign("right");
-      text("特", slot.x + slot.w - 4, slot.y + 16);
+      text(
+        "特製",
+        slot.x + slot.w - 4,
+        slot.y + 5
+      );
+    }
+
+    const selectable =
+      model.state === STATE.PLAYER_TURN &&
+      model.canTake("PLAYER", dish);
+
+    if (selectable) {
+      fill(
+        255,
+        243,
+        213,
+        25 + Math.sin(ElapsedTime * 4 + i) * 14
+      );
+
+      rect(
+        slot.x + 1,
+        slot.y + 1,
+        slot.w - 2,
+        slot.h - 2
+      );
+    } else if (model.state === STATE.PLAYER_TURN) {
+      fill(35, 31, 29, 70);
+      rect(
+        slot.x + 1,
+        slot.y + 1,
+        slot.w - 2,
+        slot.h - 2
+      );
     }
   }
 
@@ -855,8 +1021,9 @@ function drawPot() {
   fill(108, 78, 54);
   textSize(6);
   textAlign("right");
-  text("だし 3 で特製 4 で煮崩れ", 165, 247);
+  text("ことこと...", 165, 247);
 }
+
 
 function drawPlayerBowl() {
   rectMode(CORNER);
@@ -865,29 +1032,70 @@ function drawPlayerBowl() {
   const x = 38;
   const y = 57;
 
+  const fullness = Math.max(
+    0,
+    Math.min(
+      1,
+      model.playerSpace / BOWL_LIMIT
+    )
+  );
+
+  const soupHeight = 16 + fullness * 11;
+  const soupR = 170 + Math.floor(fullness * 20);
+  const soupG = 111 + Math.floor(fullness * 19);
+  const soupB = 53 + Math.floor(fullness * 9);
+
   fill(8, 10, 14, 105);
   rect(x + 11, y - 5, 96, 5);
 
   fill(76, 45, 38);
   rect(x, y, 106, 56);
+
   fill(117, 67, 48);
   rect(x + 4, y + 4, 98, 48);
+
   fill(224, 208, 176);
   rect(x + 9, y + 42, 88, 6);
+
   fill(83, 51, 38);
   rect(x + 12, y + 9, 82, 35);
-  fill(182, 125, 62);
-  rect(x + 15, y + 13, 76, 27);
+
+  fill(soupR, soupG, soupB);
+  rect(
+    x + 15,
+    y + 13,
+    76,
+    soupHeight
+  );
+
+  fill(255, 223, 151, 25 + fullness * 38);
+  rect(
+    x + 16,
+    y + 13 + soupHeight - 2,
+    74,
+    2
+  );
 
   for (let i = 0; i < model.playerBowl.length; i++) {
-    drawBowlDish(model.playerBowl[i], i, x, y, true);
+    drawBowlDish(
+      model.playerBowl[i],
+      i,
+      x,
+      y,
+      true
+    );
   }
 
   if (model.playerBowl.length === 0) {
     fill(240, 221, 182, 130);
     textSize(7);
     textAlign("center");
-    text("まだ、空いている", GAME_W / 2, 80);
+    text("まだ、空いている", GAME_W / 2, 80);
+  }
+
+  if (fullness >= 0.8) {
+    fill(255, 226, 158, 54);
+    rect(x + 18, y + 42, 70, 2);
   }
 
   fill(228, 216, 191);
@@ -898,8 +1106,15 @@ function drawPlayerBowl() {
   fill(156, 116, 72);
   textSize(6);
   text("余白", 40, 111);
-  drawCapacityTicks(58, 109, model.playerSpace, false);
+
+  drawCapacityTicks(
+    58,
+    109,
+    model.playerSpace,
+    false
+  );
 }
+
 
 function drawHeader() {
   rectMode(CORNER);
