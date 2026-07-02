@@ -1029,91 +1029,140 @@ function drawPlayerBowl() {
   rectMode(CORNER);
   noStroke();
 
-  const x = 38;
+  const x = 16;
   const y = 57;
+  const w = 148;
+  const h = 52;
 
-  const fullness = Math.max(
-    0,
-    Math.min(
-      1,
-      model.playerSpace / BOWL_LIMIT
-    )
-  );
-
-  const soupHeight = 16 + fullness * 11;
-  const soupR = 170 + Math.floor(fullness * 20);
-  const soupG = 111 + Math.floor(fullness * 19);
-  const soupB = 53 + Math.floor(fullness * 9);
+  const innerX = 25;
+  const innerY = 67;
+  const innerW = 130;
+  const innerH = 28;
+  const segmentW = 13;
 
   fill(8, 10, 14, 105);
-  rect(x + 11, y - 5, 96, 5);
+  rect(x + 8, y - 5, w - 16, 5);
 
   fill(76, 45, 38);
-  rect(x, y, 106, 56);
+  rect(x, y, w, h);
 
   fill(117, 67, 48);
-  rect(x + 4, y + 4, 98, 48);
+  rect(x + 4, y + 4, w - 8, h - 8);
 
   fill(224, 208, 176);
-  rect(x + 9, y + 42, 88, 6);
+  rect(x + 8, y + h - 10, w - 16, 6);
 
   fill(83, 51, 38);
-  rect(x + 12, y + 9, 82, 35);
+  rect(x + 9, y + 8, w - 18, h - 20);
 
-  fill(soupR, soupG, soupB);
-  rect(
-    x + 15,
-    y + 13,
-    76,
-    soupHeight
-  );
+  fill(182, 125, 62);
+  rect(innerX, innerY, innerW, innerH);
 
-  fill(255, 223, 151, 25 + fullness * 38);
-  rect(
-    x + 16,
-    y + 13 + soupHeight - 2,
-    74,
-    2
-  );
+  fill(255, 223, 151, 28);
+  rect(innerX + 2, innerY + innerH - 3, innerW - 4, 2);
+
+  let usedSpace = 0;
 
   for (let i = 0; i < model.playerBowl.length; i++) {
-    drawBowlDish(
-      model.playerBowl[i],
-      i,
-      x,
-      y,
-      true
+    const dish = model.playerBowl[i];
+    const dishX = innerX + usedSpace * segmentW;
+    const dishW = dish.space * segmentW;
+    const kindColor = getSlotKindColor(dish);
+
+    if (dish.special) {
+      fill(255, 230, 164);
+      rect(dishX, innerY, dishW, innerH);
+    } else {
+      fill(
+        kindColor.r,
+        kindColor.g,
+        kindColor.b
+      );
+      rect(dishX, innerY, dishW, innerH);
+    }
+
+    fill(255, 239, 193, dish.special ? 48 : 24);
+    rect(
+      dishX + 2,
+      innerY + 2,
+      dishW - 4,
+      innerH - 4
+    );
+
+    if (dish.special) {
+      fill(255, 248, 203);
+      rect(dishX, innerY + innerH - 2, dishW, 2);
+    } else if (dish.broth >= 2) {
+      fill(255, 226, 161, 55);
+      rect(dishX, innerY + innerH - 2, dishW, 2);
+    }
+
+    let artSize = 0.95;
+
+    if (dish.space >= 6) {
+      artSize = 2.2;
+    } else if (dish.space >= 4) {
+      artSize = 1.8;
+    } else if (dish.space >= 3) {
+      artSize = 1.55;
+    } else if (dish.space >= 2) {
+      artSize = 1.25;
+    }
+
+    const artW = 6 * artSize;
+    const artH = 6 * artSize;
+    const artX = dishX + (dishW - artW) / 2;
+    const artY = innerY + (innerH - artH) / 2;
+
+    const pulse =
+      model.lastTaken === dish &&
+      model.lastTakenBy === "PLAYER"
+        ? Math.sin(ElapsedTime * 18) * 1.2
+        : 0;
+
+    drawPixelArt(
+      artX,
+      artY + pulse,
+      ART[dish.visual],
+      artSize
+    );
+
+    usedSpace += dish.space;
+  }
+
+  for (let i = 1; i < BOWL_LIMIT; i++) {
+    fill(79, 55, 43, 125);
+    rect(
+      innerX + i * segmentW - 1,
+      innerY,
+      1,
+      innerH
     );
   }
 
   if (model.playerBowl.length === 0) {
-    fill(240, 221, 182, 130);
+    fill(240, 221, 182, 132);
     textSize(7);
     textAlign("center");
-    text("まだ、空いている", GAME_W / 2, 80);
-  }
-
-  if (fullness >= 0.8) {
-    fill(255, 226, 158, 54);
-    rect(x + 18, y + 42, 70, 2);
+    text("まだ、空いている", GAME_W / 2, 78);
+  } else if (usedSpace < BOWL_LIMIT) {
+    fill(255, 233, 182, 90);
+    textSize(6);
+    textAlign("center");
+    text(
+      "余白",
+      innerX + usedSpace * segmentW +
+        (BOWL_LIMIT - usedSpace) * segmentW / 2,
+      78
+    );
   }
 
   fill(228, 216, 191);
   textSize(7);
   textAlign("left");
-  text("あなたのお椀", 40, 120);
-
-  fill(156, 116, 72);
-  textSize(6);
-  text("余白", 40, 111);
-
-  drawCapacityTicks(
-    58,
-    109,
-    model.playerSpace,
-    false
-  );
+  text("あなたのお椀", 18, 115);
 }
+
 
 
 function drawHeader() {
